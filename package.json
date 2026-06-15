@@ -1,60 +1,24 @@
 {
-  "name": "cablepro",
+  "name": "rilo-ai-platform-impianti",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "description": "Rilo Digital Planning — monorepo for electrical engineering AI modules",
+  "workspaces": [
+    "apps/*",
+    "launcher"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "start": "vite preview",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@anthropic-ai/sdk": "^0.39.0",
-    "@supabase/supabase-js": "^2.98.0",
-    "@xyflow/react": "^12.6.4",
-    "@types/papaparse": "^5.5.2",
-    "dexie": "^4.4.2",
-    "docx": "^9.6.0",
-    "docx-preview": "^0.3.7",
-    "docxtemplater": "^3.68.3",
-    "docxtemplater-image-module-free": "^1.1.1",
-    "dotenv": "^17.2.3",
-    "exceljs": "^4.4.0",
-    "file-saver": "^2.0.5",
-    "html-to-image": "^1.11.13",
-    "html2canvas": "^1.4.1",
-    "jspdf": "^4.2.0",
-    "jspdf-autotable": "^5.0.7",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.35.2",
-    "papaparse": "^5.5.3",
-    "pizzip": "^3.2.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "recharts": "^3.8.0",
-    "xlsx": "^0.18.5"
+    "dev": "concurrently --names \"LAUNCH,CABLE,LOAD\" --prefix-colors \"cyan,red,green\" \"npm run dev --workspace=launcher\" \"npm run dev --workspace=apps/cablefill\" \"npm run dev --workspace=apps/load-analysis\"",
+    "dev:cablefill": "npm run dev --workspace=apps/cablefill",
+    "dev:load-analysis": "npm run dev --workspace=apps/load-analysis",
+    "dev:launcher": "npm run dev --workspace=launcher",
+    "build": "npm run build --workspace=launcher && npm run build --workspace=apps/cablefill && npm run build --workspace=apps/load-analysis",
+    "install:all": "npm install --workspace=apps/cablefill && npm install --workspace=apps/load-analysis && npm install --workspace=launcher"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/file-saver": "^2.0.7",
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "vitest": "^4.1.2"
+    "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

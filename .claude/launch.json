@@ -2,10 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "cablefill-dev",
+      "name": "launcher",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["node_modules\\vite\\bin\\vite.js", "--port", "3000", "--host"],
+      "runtimeArgs": ["node_modules\\vite\\bin\\vite.js", "launcher", "--port", "5173", "--host"],
+      "port": 5173
+    },
+    {
+      "name": "cablefill",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules\\vite\\bin\\vite.js", "apps\\cablefill", "--port", "3000", "--host"],
       "port": 3000
+    },
+    {
+      "name": "load-analysis",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules\\vite\\bin\\vite.js", "apps\\load-analysis", "--port", "3001", "--host"],
+      "port": 3001
     }
   ]
 }
