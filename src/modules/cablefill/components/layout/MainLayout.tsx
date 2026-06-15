@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { useProject } from '../../context/ProjectContext';
@@ -51,6 +52,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   customCables,
   customStructures
 }) => {
+  const navigate = useNavigate();
   const { darkMode, setDarkMode, activeTab, setActiveTab, moduleTheme, toastData, showToast } = useApp();
   const { user, setUser } = useAuth();
   const {
@@ -98,6 +100,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
             <p className="text-[10px] opacity-50">SISTEMA DI INGEGNERIA</p>
           </div>
         </div>
+
+        <button
+          onClick={() => navigate('/')}
+          className="mx-4 mt-4 flex items-center gap-2 px-3 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-widest"
+        >
+          <ChevronLeft size={14} />
+          Moduli
+        </button>
 
         <nav className="flex-1 py-8 px-4 space-y-8 overflow-y-auto custom-scrollbar">
           <div>
