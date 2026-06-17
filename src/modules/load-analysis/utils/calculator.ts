@@ -7,6 +7,7 @@ import {
   AVERAGE_COP,
   SIMULTANEITY_FACTORS,
 } from '../constants/coefficients';
+import { calculateLighting } from './lightingCalculator';
 
 export function calculateZone(zone: Zone, project: LoadProject): ZoneResult {
   const q = project.qualityLevel;
@@ -53,6 +54,7 @@ export function calculateProject(project: LoadProject): ProjectResult {
   const totalDemandKva = totalDemandKw / powerFactor;
 
   const methodology = generateMethodologyText(project, zones);
+  const lightingResult = calculateLighting(project.zones, project.qualityLevel);
 
   return {
     projectId: project.id,
@@ -64,6 +66,7 @@ export function calculateProject(project: LoadProject): ProjectResult {
     totalDemandKva,
     powerFactor,
     methodology,
+    lightingResult,
   };
 }
 

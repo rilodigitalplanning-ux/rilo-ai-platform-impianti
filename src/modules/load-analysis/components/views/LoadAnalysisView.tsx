@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BarChart3, Plus, Trash2, FileText, Building2, Zap,
-  Thermometer, Plug, Download, ChevronRight,
+  Thermometer, Plug, Download, ChevronRight, Lightbulb,
 } from 'lucide-react';
+import { exportLightingPdf } from '../../utils/pdfExport';
 import { useApp } from '../../context/AppContext';
 import type {
   LoadProject, Zone, ZoneUsage, BuildingType, QualityLevel, ClimateZone, SpecialLoad,
@@ -463,6 +464,101 @@ export const LoadAnalysisView: React.FC = () => {
                       ))}
                     </div>
 
+                    {/* ILLUMINAZIONE A/B/C */}
+                    {editingProject.result.lightingResult && (() => {
+                      const lr = editingProject.result.lightingResult!;
+                      const scenarios = [
+                        { key: 'ottimistico' as const, label: 'A — Ottimistico', color: '#2d6a4f', bg: '#f0f7f3', border: '#2d6a4f40' },
+                        { key: 'probabile'   as const, label: 'B — Probabile',   color: '#1a3a5c', bg: '#f0f4f8', border: '#1a3a5c40' },
+                        { key: 'pessimistico'as const, label: 'C — Pessimistico',color: '#81292C', bg: '#fdf5f5', border: '#81292C40' },
+                      ];
+                      return (
+                        <div className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl overflow-hidden premium-shadow">
+                          <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${moduleTheme.accent}20` }}>
+                                <Lightbulb size={15} style={{ color: moduleTheme.accent }} />
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-black dark:text-white uppercase tracking-tight">ILLUMINAZIONE — SCENARI A / B / C</p>
+                                <p className="text-[9px] opacity-40 dark:text-white/40 uppercase tracking-widest">
+                                  Metodo flusso luminoso · EN 12464-1 · {lr.totalArea.toFixed(0)} m² · {lr.zones.filter(z => z.rcrCorrected).length > 0 ? `${lr.zones.filter(z => z.rcrCorrected).length} zone con correzione RCR` : 'nessuna correzione RCR'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => exportLightingPdf(editingProject, lr)}
+                              className="px-4 py-2 rounded-xl text-[10px] font-bold border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white flex items-center gap-2"
+                            >
+                              <Download size={12} /> ESPORTA PDF
+                            </button>
+                          </div>
+
+                          {/* Scenari summary */}
+                          <div className="grid grid-cols-3 gap-px bg-black/5 dark:bg-white/5">
+                            {scenarios.map(s => (
+                              <div key={s.key} className="p-5 bg-white dark:bg-[#141414]">
+                                <p className="text-[9px] font-black uppercase tracking-widest mb-1" style={{ color: s.color }}>{s.label}</p>
+                                <p className="text-3xl font-black dark:text-white" style={{ color: s.color }}>
+                                  {lr.total[s.key].toFixed(2)}
+                                  <span className="text-sm font-bold opacity-40 ml-1">kW</span>
+                                </p>
+                                <p className="text-[9px] opacity-50 dark:text-white/50 mt-1">LPD {lr.avgLpd[s.key].toFixed(1)} W/m²</p>
+                                <div className="mt-3 space-y-1">
+                                  <div className="flex justify-between text-[9px]">
+                                    <span className="opacity-40 dark:text-white/40">Illumin. normale</span>
+                                    <span className="font-bold dark:text-white">{lr.subtotal[s.key].toFixed(2)} kW</span>
+                                  </div>
+                                  <div className="flex justify-between text-[9px]">
+                                    <span className="opacity-40 dark:text-white/40">Sicurezza (+6%)</span>
+                                    <span className="font-bold dark:text-white">{lr.safetyLighting[s.key].toFixed(2)} kW</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Zona dettaglio */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[760px]">
+                              <thead>
+                                <tr className="bg-[#f5f5f5] dark:bg-white/5 border-b border-black/10 dark:border-white/10">
+                                  {['Zona', 'Area (m²)', 'h (m)', 'Em (lux)', 'UF nom.', 'RCR', 'UF eff.', 'P ott. (W)', 'P prob. (W)', 'P pess. (W)'].map(h => (
+                                    <th key={h} className="px-3 py-2 text-[9px] font-bold opacity-40 tracking-widest uppercase">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {lr.zones.map(z => (
+                                  <tr key={z.zoneId} className="border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                    <td className="px-3 py-2 text-[10px] font-bold dark:text-white">
+                                      {z.zoneName || USAGE_LABELS[z.usage]}
+                                      {z.rcrCorrected && <span className="ml-1 text-[8px] text-amber-600 font-black">⚠RCR</span>}
+                                    </td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.area}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.height.toFixed(1)}</td>
+                                    <td className="px-3 py-2 text-[10px] font-bold dark:text-white">{z.Em}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.UF_nominal.toFixed(2)}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.RCR.toFixed(1)}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.UF_effective.toFixed(2)}</td>
+                                    <td className="px-3 py-2 text-[10px] font-bold" style={{ color: '#2d6a4f' }}>{Math.round(z.power.ottimistico)}</td>
+                                    <td className="px-3 py-2 text-[10px] font-bold" style={{ color: '#1a3a5c' }}>{Math.round(z.power.probabile)}</td>
+                                    <td className="px-3 py-2 text-[10px] font-bold" style={{ color: '#81292C' }}>{Math.round(z.power.pessimistico)}</td>
+                                  </tr>
+                                ))}
+                                <tr className="border-t-2 border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5">
+                                  <td className="px-3 py-2 text-[10px] font-black dark:text-white uppercase tracking-widest" colSpan={7}>TOTALE</td>
+                                  <td className="px-3 py-2 text-[10px] font-black" style={{ color: '#2d6a4f' }}>{Math.round(lr.subtotal.ottimistico * 1000)}</td>
+                                  <td className="px-3 py-2 text-[10px] font-black" style={{ color: '#1a3a5c' }}>{Math.round(lr.subtotal.probabile * 1000)}</td>
+                                  <td className="px-3 py-2 text-[10px] font-black" style={{ color: '#81292C' }}>{Math.round(lr.subtotal.pessimistico * 1000)}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Table */}
                     <div className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl overflow-x-auto shadow-sm custom-scrollbar">
                       <table className="w-full text-left border-collapse min-w-[700px]">
@@ -501,9 +597,14 @@ export const LoadAnalysisView: React.FC = () => {
                     <div className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-8 rounded-3xl premium-shadow space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-black dark:text-white uppercase tracking-tight">NOTA METODOLOGICA</h3>
-                        <button className="px-4 py-2 rounded-xl text-[10px] font-bold border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white flex items-center gap-2">
-                          <Download size={12} /> ESPORTA PDF
-                        </button>
+                        {editingProject.result?.lightingResult && (
+                          <button
+                            onClick={() => exportLightingPdf(editingProject, editingProject.result!.lightingResult!)}
+                            className="px-4 py-2 rounded-xl text-[10px] font-bold border border-black/20 dark:border-white/20 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white flex items-center gap-2"
+                          >
+                            <Download size={12} /> ESPORTA PDF
+                          </button>
+                        )}
                       </div>
                       <pre className="text-[10px] font-mono leading-relaxed whitespace-pre-wrap opacity-70 dark:text-white/70">
                         {editingProject.result.methodology}

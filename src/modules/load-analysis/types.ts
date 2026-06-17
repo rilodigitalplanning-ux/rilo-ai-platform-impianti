@@ -82,6 +82,7 @@ export interface ProjectResult {
   totalDemandKva: number;
   powerFactor: number;
   methodology: string;
+  lightingResult?: import('./utils/lightingCalculator').LightingCalculationResult;
 }
 
 export interface LoadProject {
