@@ -1,3 +1,45 @@
+export type EnvelopeType =
+  | 'muratura_pesante'
+  | 'muratura_leggera'
+  | 'curtain_wall_vetro'
+  | 'capannone_industriale'
+  | 'misto';
+
+export type HvacMode = 'parametrico' | 'componenti';
+
+export interface HvacHeatPump {
+  id: string;
+  label: string;
+  thermalKw: number;
+  cop: number;
+  quantity: number;
+}
+
+export interface HvacAhu {
+  id: string;
+  label: string;
+  flowM3h: number;
+  pressurePa: number;
+  efficiency: number;
+  quantity: number;
+}
+
+export interface HvacPump {
+  id: string;
+  label: string;
+  flowM3h: number;
+  headM: number;
+  efficiency: number;
+  quantity: number;
+}
+
+export interface HvacEquipment {
+  heatPumps: HvacHeatPump[];
+  ahus: HvacAhu[];
+  pumps: HvacPump[];
+  boilerKwThermal?: number;
+}
+
 export type BuildingType =
   | 'residenziale'
   | 'uffici'
@@ -83,6 +125,7 @@ export interface ProjectResult {
   powerFactor: number;
   methodology: string;
   lightingResult?: import('./utils/lightingCalculator').LightingCalculationResult;
+  hvacResult?: import('./utils/hvacCalculator').HvacCalculationResult;
 }
 
 export interface LoadProject {
@@ -92,6 +135,9 @@ export interface LoadProject {
   buildingType: BuildingType;
   qualityLevel: QualityLevel;
   climateZone: ClimateZone;
+  envelopeType: EnvelopeType;
+  hvacMode: HvacMode;
+  hvacEquipment: HvacEquipment;
   zones: Zone[];
   result?: ProjectResult;
   createdAt: string;

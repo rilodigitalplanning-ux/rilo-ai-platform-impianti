@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BarChart3, Plus, Trash2, FileText, Building2, Zap,
-  Thermometer, Plug, Download, ChevronRight, Lightbulb,
+  Thermometer, Plug, Download, ChevronRight, Lightbulb, Wind,
 } from 'lucide-react';
 import { exportLightingPdf } from '../../utils/pdfExport';
 import { useApp } from '../../context/AppContext';
 import type {
   LoadProject, Zone, ZoneUsage, BuildingType, QualityLevel, ClimateZone, SpecialLoad,
+  EnvelopeType, HvacMode, HvacHeatPump, HvacAhu, HvacPump,
 } from '../../types';
 import {
-  USAGE_LABELS, BUILDING_TYPE_LABELS, CLIMATE_ZONE_LABELS,
+  USAGE_LABELS, BUILDING_TYPE_LABELS, CLIMATE_ZONE_LABELS, ENVELOPE_TYPE_LABELS,
 } from '../../constants/coefficients';
 import { calculateProject } from '../../utils/calculator';
 
@@ -21,6 +22,9 @@ const EMPTY_PROJECT = (): LoadProject => ({
   buildingType: 'uffici',
   qualityLevel: 'standard',
   climateZone: 'E',
+  envelopeType: 'muratura_pesante',
+  hvacMode: 'parametrico',
+  hvacEquipment: { heatPumps: [], ahus: [], pumps: [] },
   zones: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -106,6 +110,33 @@ export const LoadAnalysisView: React.FC = () => {
     if (!zone) return;
     updateZone(zoneId, { specialLoads: zone.specialLoads.filter(s => s.id !== slId) });
   };
+
+  const addHeatPump = () => {
+    const hp: HvacHeatPump = { id: crypto.randomUUID(), label: '', thermalKw: 0, cop: 3.0, quantity: 1 };
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, heatPumps: [...p.hvacEquipment.heatPumps, hp] } }));
+  };
+  const updateHeatPump = (id: string, patch: Partial<HvacHeatPump>) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, heatPumps: p.hvacEquipment.heatPumps.map(h => h.id === id ? { ...h, ...patch } : h) } }));
+  const removeHeatPump = (id: string) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, heatPumps: p.hvacEquipment.heatPumps.filter(h => h.id !== id) } }));
+
+  const addAhu = () => {
+    const ahu: HvacAhu = { id: crypto.randomUUID(), label: '', flowM3h: 0, pressurePa: 500, efficiency: 0.62, quantity: 1 };
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, ahus: [...p.hvacEquipment.ahus, ahu] } }));
+  };
+  const updateAhu = (id: string, patch: Partial<HvacAhu>) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, ahus: p.hvacEquipment.ahus.map(a => a.id === id ? { ...a, ...patch } : a) } }));
+  const removeAhu = (id: string) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, ahus: p.hvacEquipment.ahus.filter(a => a.id !== id) } }));
+
+  const addPump = () => {
+    const pump: HvacPump = { id: crypto.randomUUID(), label: '', flowM3h: 0, headM: 0, efficiency: 0.50, quantity: 1 };
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, pumps: [...p.hvacEquipment.pumps, pump] } }));
+  };
+  const updatePump = (id: string, patch: Partial<HvacPump>) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, pumps: p.hvacEquipment.pumps.map(pu => pu.id === id ? { ...pu, ...patch } : pu) } }));
+  const removePump = (id: string) =>
+    setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, pumps: p.hvacEquipment.pumps.filter(pu => pu.id !== id) } }));
 
   const inputCls = `w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold dark:text-white focus:outline-none focus:ring-2 transition-all`;
   const selectCls = `w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest dark:text-white focus:outline-none focus:ring-2 transition-all`;
@@ -238,6 +269,123 @@ export const LoadAnalysisView: React.FC = () => {
                         ))}
                       </div>
                     </div>
+
+                    {/* HVAC — Involucro */}
+                    <div className="col-span-2 pt-2 border-t border-black/5 dark:border-white/5 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <Wind size={14} style={{ color: moduleTheme.accent }} />
+                        <span className="text-[10px] font-black uppercase tracking-widest dark:text-white">HVAC / CLIMATIZZAZIONE</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40">TIPO INVOLUCRO</label>
+                          <select
+                            value={editingProject.envelopeType}
+                            onChange={e => setEditingProject(p => ({ ...p, envelopeType: e.target.value as EnvelopeType }))}
+                            className={selectCls}
+                          >
+                            {Object.entries(ENVELOPE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40">MODALITÀ STIMA</label>
+                          <div className="flex gap-2">
+                            {(['parametrico', 'componenti'] as HvacMode[]).map(m => (
+                              <button
+                                key={m}
+                                onClick={() => setEditingProject(p => ({ ...p, hvacMode: m }))}
+                                className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border ${
+                                  editingProject.hvacMode === m
+                                    ? 'text-white border-transparent'
+                                    : 'border-black/10 dark:border-white/10 dark:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                                }`}
+                                style={editingProject.hvacMode === m
+                                  ? { background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }
+                                  : {}}
+                              >
+                                {m === 'parametrico' ? 'Parametrico' : 'Componenti'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Component mode equipment inputs */}
+                      {editingProject.hvacMode === 'componenti' && (
+                        <div className="space-y-4 p-4 bg-black/3 dark:bg-white/3 rounded-2xl border border-black/5 dark:border-white/5">
+
+                          {/* Heat Pumps */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-black uppercase tracking-widest dark:text-white">Pompe di calore / Polivalenti</label>
+                              <button onClick={addHeatPump} className="text-[9px] font-bold flex items-center gap-1" style={{ color: moduleTheme.accent }}><Plus size={10} /> Aggiungi</button>
+                            </div>
+                            <div className="text-[9px] opacity-40 dark:text-white/40">P_el = kW_th / COP × quantità</div>
+                            {editingProject.hvacEquipment.heatPumps.map(hp => (
+                              <div key={hp.id} className="flex gap-2 items-center flex-wrap">
+                                <input type="text" value={hp.label} onChange={e => updateHeatPump(hp.id, { label: e.target.value })} placeholder="Etichetta" className={`${inputCls} flex-1 min-w-[120px]`} />
+                                <input type="number" min="0" step="1" value={hp.thermalKw || ''} onChange={e => updateHeatPump(hp.id, { thermalKw: parseFloat(e.target.value) || 0 })} placeholder="kWt" className={`${inputCls} w-20`} />
+                                <input type="number" min="1" max="6" step="0.1" value={hp.cop} onChange={e => updateHeatPump(hp.id, { cop: parseFloat(e.target.value) || 3 })} placeholder="COP" className={`${inputCls} w-20`} />
+                                <input type="number" min="1" value={hp.quantity} onChange={e => updateHeatPump(hp.id, { quantity: parseInt(e.target.value) || 1 })} placeholder="n°" className={`${inputCls} w-16`} />
+                                <button onClick={() => removeHeatPump(hp.id)} className="text-red-500 hover:text-red-600"><Trash2 size={12} /></button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* AHUs */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-black uppercase tracking-widest dark:text-white">UTA / Recuperatori</label>
+                              <button onClick={addAhu} className="text-[9px] font-bold flex items-center gap-1" style={{ color: moduleTheme.accent }}><Plus size={10} /> Aggiungi</button>
+                            </div>
+                            <div className="text-[9px] opacity-40 dark:text-white/40">P = (Q × ΔP) / (3.600.000 × η) × 2 vent. × qty</div>
+                            {editingProject.hvacEquipment.ahus.map(ahu => (
+                              <div key={ahu.id} className="flex gap-2 items-center flex-wrap">
+                                <input type="text" value={ahu.label} onChange={e => updateAhu(ahu.id, { label: e.target.value })} placeholder="Etichetta" className={`${inputCls} flex-1 min-w-[100px]`} />
+                                <input type="number" min="0" value={ahu.flowM3h || ''} onChange={e => updateAhu(ahu.id, { flowM3h: parseFloat(e.target.value) || 0 })} placeholder="m³/h" className={`${inputCls} w-24`} />
+                                <input type="number" min="0" value={ahu.pressurePa} onChange={e => updateAhu(ahu.id, { pressurePa: parseFloat(e.target.value) || 500 })} placeholder="Pa" className={`${inputCls} w-20`} />
+                                <input type="number" min="0.1" max="1" step="0.01" value={ahu.efficiency} onChange={e => updateAhu(ahu.id, { efficiency: parseFloat(e.target.value) || 0.62 })} placeholder="η" className={`${inputCls} w-16`} />
+                                <input type="number" min="1" value={ahu.quantity} onChange={e => updateAhu(ahu.id, { quantity: parseInt(e.target.value) || 1 })} placeholder="n°" className={`${inputCls} w-16`} />
+                                <button onClick={() => removeAhu(ahu.id)} className="text-red-500 hover:text-red-600"><Trash2 size={12} /></button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Pumps */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-black uppercase tracking-widest dark:text-white">Circolatori / Pompe</label>
+                              <button onClick={addPump} className="text-[9px] font-bold flex items-center gap-1" style={{ color: moduleTheme.accent }}><Plus size={10} /> Aggiungi</button>
+                            </div>
+                            <div className="text-[9px] opacity-40 dark:text-white/40">P = (Q × H × 9,81) / (3600 × η × 1000) × qty</div>
+                            {editingProject.hvacEquipment.pumps.map(pu => (
+                              <div key={pu.id} className="flex gap-2 items-center flex-wrap">
+                                <input type="text" value={pu.label} onChange={e => updatePump(pu.id, { label: e.target.value })} placeholder="Etichetta" className={`${inputCls} flex-1 min-w-[100px]`} />
+                                <input type="number" min="0" value={pu.flowM3h || ''} onChange={e => updatePump(pu.id, { flowM3h: parseFloat(e.target.value) || 0 })} placeholder="m³/h" className={`${inputCls} w-24`} />
+                                <input type="number" min="0" value={pu.headM || ''} onChange={e => updatePump(pu.id, { headM: parseFloat(e.target.value) || 0 })} placeholder="m c.a." className={`${inputCls} w-24`} />
+                                <input type="number" min="0.1" max="1" step="0.01" value={pu.efficiency} onChange={e => updatePump(pu.id, { efficiency: parseFloat(e.target.value) || 0.5 })} placeholder="η" className={`${inputCls} w-16`} />
+                                <input type="number" min="1" value={pu.quantity} onChange={e => updatePump(pu.id, { quantity: parseInt(e.target.value) || 1 })} placeholder="n°" className={`${inputCls} w-16`} />
+                                <button onClick={() => removePump(pu.id)} className="text-red-500 hover:text-red-600"><Trash2 size={12} /></button>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Boiler */}
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest dark:text-white">Caldaia (gas)</label>
+                            <div className="text-[9px] opacity-40 dark:text-white/40">Potenza elettrica ausiliari per interpolazione tabella costruttori</div>
+                            <input
+                              type="number" min="0" step="1"
+                              value={editingProject.hvacEquipment.boilerKwThermal || ''}
+                              onChange={e => setEditingProject(p => ({ ...p, hvacEquipment: { ...p.hvacEquipment, boilerKwThermal: parseFloat(e.target.value) || undefined } }))}
+                              placeholder="Potenza termica caldaia [kWt] — 0 se assente"
+                              className={inputCls}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 </div>
 
@@ -554,6 +702,137 @@ export const LoadAnalysisView: React.FC = () => {
                                 </tr>
                               </tbody>
                             </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* HVAC A/B/C */}
+                    {editingProject.result.hvacResult && (() => {
+                      const hr = editingProject.result.hvacResult!;
+                      const scenarios = [
+                        { key: 'ottimistico' as const, label: 'A — Ottimistico', color: '#2d6a4f' },
+                        { key: 'probabile'   as const, label: 'B — Probabile',   color: '#1a3a5c' },
+                        { key: 'pessimistico'as const, label: 'C — Pessimistico',color: '#81292C' },
+                      ];
+                      const ENVELOPE_LABELS: Record<string, string> = {
+                        muratura_pesante: 'Muratura pesante / C.A.',
+                        muratura_leggera: 'Muratura leggera',
+                        curtain_wall_vetro: 'Curtain wall vetro',
+                        capannone_industriale: 'Capannone industriale',
+                        misto: 'Involucro misto',
+                      };
+                      return (
+                        <div className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl overflow-hidden premium-shadow">
+                          <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${moduleTheme.accent}20` }}>
+                                <Wind size={15} style={{ color: moduleTheme.accent }} />
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-black dark:text-white uppercase tracking-tight">HVAC — SCENARI A / B / C</p>
+                                <p className="text-[9px] opacity-40 dark:text-white/40 uppercase tracking-widest">
+                                  {hr.mode === 'componenti' ? 'Modalità componenti' : 'Modalità parametrica'} · {ENVELOPE_LABELS[hr.envelopeType]} · {hr.totalArea.toFixed(0)} m²
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Scenari summary */}
+                          <div className="grid grid-cols-3 gap-px bg-black/5 dark:bg-white/5">
+                            {scenarios.map(s => {
+                              const sc = hr.scenarios[s.key];
+                              return (
+                                <div key={s.key} className="p-5 bg-white dark:bg-[#141414]">
+                                  <p className="text-[9px] font-black uppercase tracking-widest mb-1" style={{ color: s.color }}>{s.label}</p>
+                                  <p className="text-3xl font-black dark:text-white" style={{ color: s.color }}>
+                                    {sc.installedKw.toFixed(2)}<span className="text-sm font-bold opacity-40 ml-1">kW inst.</span>
+                                  </p>
+                                  <p className="text-[9px] opacity-50 dark:text-white/50 mt-1">Domanda: {sc.demandKw.toFixed(2)} kW</p>
+                                  <div className="mt-3 space-y-1">
+                                    <div className="flex justify-between text-[9px]">
+                                      <span className="opacity-40 dark:text-white/40">Riscaldamento (HP)</span>
+                                      <span className="font-bold dark:text-white">{sc.elecHeatingKw.toFixed(2)} kW</span>
+                                    </div>
+                                    <div className="flex justify-between text-[9px]">
+                                      <span className="opacity-40 dark:text-white/40">Raffrescamento (HP)</span>
+                                      <span className="font-bold dark:text-white">{sc.elecCoolingKw.toFixed(2)} kW</span>
+                                    </div>
+                                    <div className="flex justify-between text-[9px]">
+                                      <span className="opacity-40 dark:text-white/40">Ausiliari (pompe + UTA)</span>
+                                      <span className="font-bold dark:text-white">{sc.auxElecKw.toFixed(2)} kW</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Zone detail table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                              <thead>
+                                <tr className="bg-[#f5f5f5] dark:bg-white/5 border-b border-black/10 dark:border-white/10">
+                                  {['Zona', 'Area (m²)', 'Th. risc. B (kW)', 'Th. raff. B (kW)', 'El. risc. A/B/C (kW)', 'El. raff. A/B/C (kW)', 'Progetto B (kW)'].map(h => (
+                                    <th key={h} className="px-3 py-2 text-[9px] font-bold opacity-40 tracking-widest uppercase">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {hr.zones.map(z => (
+                                  <tr key={z.zoneId} className="border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                    <td className="px-3 py-2 text-[10px] font-bold dark:text-white">{z.zoneName || z.zoneId}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.area}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.thermalHeatingKw.probabile.toFixed(1)}</td>
+                                    <td className="px-3 py-2 text-[10px] dark:text-white">{z.thermalCoolingKw.probabile.toFixed(1)}</td>
+                                    <td className="px-3 py-2 text-[10px]">
+                                      <span style={{ color: '#2d6a4f' }}>{z.elecHeatingKw.ottimistico.toFixed(1)}</span>
+                                      {' / '}
+                                      <span style={{ color: '#1a3a5c' }}>{z.elecHeatingKw.probabile.toFixed(1)}</span>
+                                      {' / '}
+                                      <span style={{ color: '#81292C' }}>{z.elecHeatingKw.pessimistico.toFixed(1)}</span>
+                                    </td>
+                                    <td className="px-3 py-2 text-[10px]">
+                                      <span style={{ color: '#2d6a4f' }}>{z.elecCoolingKw.ottimistico.toFixed(1)}</span>
+                                      {' / '}
+                                      <span style={{ color: '#1a3a5c' }}>{z.elecCoolingKw.probabile.toFixed(1)}</span>
+                                      {' / '}
+                                      <span style={{ color: '#81292C' }}>{z.elecCoolingKw.pessimistico.toFixed(1)}</span>
+                                    </td>
+                                    <td className="px-3 py-2 text-[10px] font-bold" style={{ color: '#1a3a5c' }}>{z.designElecKw.probabile.toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Component result (if available) */}
+                          {hr.componentResult && (
+                            <div className="px-6 py-4 border-t border-black/5 dark:border-white/5 bg-black/2 dark:bg-white/2">
+                              <p className="text-[9px] font-black uppercase tracking-widest opacity-40 dark:text-white/40 mb-3">RISULTATO MODALITÀ COMPONENTI</p>
+                              <div className="grid grid-cols-5 gap-4">
+                                {[
+                                  { label: 'Pompe di calore', value: hr.componentResult.heatPumpsKw },
+                                  { label: 'Vent. UTA', value: hr.componentResult.ahuFansKw },
+                                  { label: 'Circolatori', value: hr.componentResult.pumpsKw },
+                                  { label: 'Caldaia (aux)', value: hr.componentResult.boilerAuxKw },
+                                  { label: 'TOTALE HVAC', value: hr.componentResult.totalInstalledKw },
+                                ].map(({ label, value }) => (
+                                  <div key={label}>
+                                    <p className="text-[9px] opacity-40 dark:text-white/40">{label}</p>
+                                    <p className="text-lg font-black dark:text-white">{value.toFixed(2)} <span className="text-xs opacity-40">kW</span></p>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[9px] opacity-40 dark:text-white/40 mt-2">Domanda (f=0,85): {hr.componentResult.demandKw.toFixed(2)} kW</p>
+                            </div>
+                          )}
+
+                          <div className="px-6 py-3 border-t border-black/5 dark:border-white/5">
+                            <p className="text-[9px] opacity-30 dark:text-white/30">
+                              Metodo: UNI/TS 11300-1 · Fattore climatico zona {editingProject.climateZone} · Involucro: {ENVELOPE_LABELS[hr.envelopeType]}
+                              {hr.mode === 'parametrico' ? ' · Stima parametrica — i risultati A/B/C variano con involucro e COP/EER impianto.' : ' · Calcolo su componenti specificati.'}
+                            </p>
                           </div>
                         </div>
                       );

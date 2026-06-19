@@ -8,6 +8,7 @@ import {
   SIMULTANEITY_FACTORS,
 } from '../constants/coefficients';
 import { calculateLighting } from './lightingCalculator';
+import { calculateHvac } from './hvacCalculator';
 
 export function calculateZone(zone: Zone, project: LoadProject): ZoneResult {
   const q = project.qualityLevel;
@@ -55,6 +56,7 @@ export function calculateProject(project: LoadProject): ProjectResult {
 
   const methodology = generateMethodologyText(project, zones);
   const lightingResult = calculateLighting(project.zones, project.qualityLevel);
+  const hvacResult = calculateHvac(project);
 
   return {
     projectId: project.id,
@@ -67,6 +69,7 @@ export function calculateProject(project: LoadProject): ProjectResult {
     powerFactor,
     methodology,
     lightingResult,
+    hvacResult,
   };
 }
 

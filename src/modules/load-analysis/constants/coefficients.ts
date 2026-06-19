@@ -138,6 +138,8 @@ export const BUILDING_TYPE_LABELS: Record<string, string> = {
   misto: 'Misto',
 };
 
+export { ENVELOPE_TYPE_LABELS } from './hvacCoefficients';
+
 export const CLIMATE_ZONE_LABELS: Record<string, string> = {
   A: 'Zona A (Palermo, Trapani)',
   B: 'Zona B (Napoli, Bari)',

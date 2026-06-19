@@ -212,6 +212,9 @@ export async function sendAIMessage({
               buildingType: 'uffici',
               qualityLevel: 'standard',
               climateZone: 'E',
+              envelopeType: 'muratura_pesante',
+              hvacMode: 'parametrico',
+              hvacEquipment: { heatPumps: [], ahus: [], pumps: [] },
               zones: [],
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -233,6 +236,8 @@ export async function sendAIMessage({
             currentProject = {
               id: crypto.randomUUID(), name: 'Nuovo Progetto', client: '',
               buildingType: 'uffici', qualityLevel: 'standard', climateZone: 'E',
+              envelopeType: 'muratura_pesante', hvacMode: 'parametrico',
+              hvacEquipment: { heatPumps: [], ahus: [], pumps: [] },
               zones: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
             };
           }
