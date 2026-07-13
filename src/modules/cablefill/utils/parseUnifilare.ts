@@ -86,7 +86,7 @@ Foca nesses circuitos e extrai todas as informações disponíveis.`;
 
   const response = await client.messages.create({
     model: 'claude-opus-4-8',
-    max_tokens: 2048,
+    max_tokens: 8192,
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -108,13 +108,22 @@ Foca nesses circuitos e extrai todas as informações disponíveis.`;
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error('Lo schema è troppo complesso: la risposta dell\'IA è stata troncata. Prova a dividere lo schema in sezioni più piccole o a semplificarlo.');
+  }
+
   // Extract JSON from response (model may wrap in markdown code blocks)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error('Resposta da IA não contém JSON válido. Tente novamente.');
+    throw new Error('La risposta dell\'IA non contiene un JSON valido. Riprova.');
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as ParseUnifilareResult;
+  let parsed: ParseUnifilareResult;
+  try {
+    parsed = JSON.parse(jsonMatch[0]) as ParseUnifilareResult;
+  } catch {
+    throw new Error('L\'IA ha restituito una risposta malformata (probabilmente troppo lunga). Prova a dividere lo schema in sezioni più piccole.');
+  }
   return parsed;
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   BarChart3, Plus, Trash2, FileText, Building2, Zap,
@@ -47,6 +48,12 @@ export const LoadAnalysisView: React.FC = () => {
   const activeSection = activeTab as Section;
   const setActiveSection = setActiveTab as (s: Section) => void;
   const [editingProject, setEditingProject] = useState<LoadProject>(() => currentProject ?? EMPTY_PROJECT());
+
+  // Portal target nella top bar del MainLayout, per il bottone "Calcola"
+  const [headerActionPortal, setHeaderActionPortal] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setHeaderActionPortal(document.getElementById('header-action-portal'));
+  }, []);
 
   // Sync editingProject when AI modifies currentProject externally
   useEffect(() => {
@@ -152,26 +159,7 @@ export const LoadAnalysisView: React.FC = () => {
       <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
         <div className="max-w-6xl mx-auto space-y-8">
 
-          {/* Header */}
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-black italic tracking-tighter uppercase dark:text-white">
-                ANALISI CARICHI PRELIMINARE
-              </h2>
-              <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest dark:text-white/40">
-                Stima parametrica della potenza elettrica necessaria
-              </p>
-            </div>
-            <button
-              onClick={handleCalculate}
-              className="px-6 py-2.5 rounded-xl text-[10px] font-bold text-white flex items-center gap-2 active:scale-95 transition-all overflow-hidden group relative"
-              style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
-            >
-              <BarChart3 size={14} className="relative z-10" />
-              <span className="relative z-10">CALCOLA</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-            </button>
-          </div>
+          {/* Il bottone "Calcola" vive nella top bar (vedi portal sotto) */}
 
           {/* Sub-nav */}
           <div className="flex gap-1 p-1 bg-black/5 dark:bg-white/5 rounded-xl w-fit">
@@ -896,6 +884,19 @@ export const LoadAnalysisView: React.FC = () => {
           </AnimatePresence>
         </div>
       </div>
+
+      {headerActionPortal && createPortal(
+        <button
+          onClick={handleCalculate}
+          className="px-4 py-2 rounded-full text-[10px] font-bold text-white flex items-center gap-2 active:scale-95 transition-all overflow-hidden group relative"
+          style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
+        >
+          <BarChart3 size={14} className="relative z-10" />
+          <span className="relative z-10">CALCOLA</span>
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+        </button>,
+        headerActionPortal
+      )}
     </motion.div>
   );
 };

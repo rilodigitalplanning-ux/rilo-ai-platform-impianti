@@ -58,11 +58,15 @@ export const THERMAL_LOAD_COOLING: Record<ZoneUsage, Record<EnvelopeType, number
 // eer: EER chiller/HP (raffrescamento)
 // auxPct: % del carico termico totale per ausiliari (pompe + ventilatori UTA)
 // fContemp: fattore di contemporaneità HVAC
+//
+// Ricalibrati su richiesta committente (edificio istituzionale GdF):
+// il vecchio "pessimistico" diventa il nuovo "probabile" (base di progetto).
+// A = ex-B (riferimento ottimistico), B = ex-C (base progetto), C = nuovo estremo conservativo.
 // ---------------------------------------------------------------------------
 export const HVAC_SCENARIO = {
-  ottimistico:  { thermalMultiplier: 0.78, cop: 3.5, eer: 3.2, auxPct: 0.055, fContemp: 0.85 },
-  probabile:    { thermalMultiplier: 1.00, cop: 3.0, eer: 2.7, auxPct: 0.085, fContemp: 0.85 },
-  pessimistico: { thermalMultiplier: 1.28, cop: 2.5, eer: 2.2, auxPct: 0.120, fContemp: 0.90 },
+  ottimistico:  { thermalMultiplier: 1.00, cop: 3.0, eer: 2.7, auxPct: 0.085, fContemp: 0.85 },
+  probabile:    { thermalMultiplier: 1.28, cop: 2.5, eer: 2.2, auxPct: 0.120, fContemp: 0.90 },
+  pessimistico: { thermalMultiplier: 1.55, cop: 2.0, eer: 1.8, auxPct: 0.150, fContemp: 0.95 },
 } as const;
 
 export type HvacScenario = keyof typeof HVAC_SCENARIO;

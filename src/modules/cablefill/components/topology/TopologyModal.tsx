@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, GitBranch, CheckCircle2, ChevronRight, Upload, Loader2, AlertCircle, FileImage, PenLine, Map } from 'lucide-react';
+import { X, GitBranch, CheckCircle2, ChevronRight, Upload, Loader2, AlertCircle, FileImage, PenLine, Map, Save, Clock, Trash2 } from 'lucide-react';
 import { TopologyEditor } from './TopologyEditor';
 import type { TopologyGraph, TopologyProjectConfig, TopologyCircuit } from '../../types';
 import { parseUnifilare, fileToBase64 } from '../../utils/parseUnifilare';
@@ -12,21 +12,91 @@ interface TopologyModalProps {
   onClose: () => void;
   onConfirm: (circuits: TopologyCircuit[], config: TopologyProjectConfig) => void;
   darkMode: boolean;
+  /** Progetto ombrello attivo — la bozza viene salvata per singolo progetto. */
+  groupId: string;
+  groupName: string;
+}
+
+// ─── Bozza (draft) — persistita in localStorage per progetto ──────────────────
+interface TopologyDraftNode { id: string; type: string; label: string; position: { x: number; y: number } }
+interface TopologyDraftEdge { id: string; source: string; target: string; label: string; bend: { x: number; y: number } | null }
+interface TopologyDraft {
+  step: Step;
+  step1Mode: string;
+  config: TopologyProjectConfig;
+  circuits: TopologyCircuit[];
+  nodes: TopologyDraftNode[];
+  edges: TopologyDraftEdge[];
+  savedAt: string;
+}
+
+const draftKey = (groupId: string) => `topology-draft:${groupId}`;
+
+function loadDraft(groupId: string): TopologyDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(groupId));
+    return raw ? JSON.parse(raw) as TopologyDraft : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(groupId: string) {
+  localStorage.removeItem(draftKey(groupId));
+}
+
+function serializeNodes(nodes: Node[]): TopologyDraftNode[] {
+  return nodes.map(n => ({ id: n.id, type: n.type || 'terminal', label: (n.data?.label as string) || '', position: n.position }));
+}
+
+function serializeEdges(edges: Edge[]): TopologyDraftEdge[] {
+  return edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: (e.data?.label as string) || '', bend: (e.data?.bend as any) || null }));
+}
+
+function draftNodesToRF(nodes: TopologyDraftNode[]): Node[] {
+  return nodes.map(n => ({ id: n.id, type: n.type as any, position: n.position, data: { label: n.label } }));
+}
+
+function draftEdgesToRF(edges: TopologyDraftEdge[]): Edge[] {
+  return edges.map(e => ({ id: e.id, source: e.source, target: e.target, type: 'labeled', data: { label: e.label, bend: e.bend } }));
 }
 
 type Step = 1 | 2 | 3 | 4;
 
 const STEP_LABELS: Record<Step, string> = {
   1: 'Topologia',
-  2: 'Configuração',
-  3: 'Revisão',
-  4: 'Unifilar',
+  2: 'Configurazione',
+  3: 'Revisione',
+  4: 'Unifilare',
 };
 
 const CONDUIT_STANDARD_SIZES = [16, 20, 25, 32, 40, 50, 63, 75, 90, 110, 125, 160] as const;
 const TRAY_STANDARD_WIDTHS   = [50, 100, 150, 200, 300, 400, 500] as const;
 
-export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: TopologyModalProps) {
+// L'API di Claude rifiuta richieste oltre ~32MB (il file in base64 pesa ~33% in più
+// del file originale): oltre questa soglia la richiesta fallisce a livello di rete
+// prima ancora di raggiungere il server, e l'unico sintomo visibile è "Connection error".
+const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+function validateFileSize(file: File): string | null {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    return `Il file è troppo grande (${sizeMB} MB, limite ${MAX_FILE_SIZE_MB} MB). Riduci la risoluzione/qualità dell'export PDF, oppure dividi il disegno in più pagine e caricale singolarmente.`;
+  }
+  return null;
+}
+
+/** Traduce gli errori tecnici del SDK/rete in un messaggio comprensibile e utile. */
+function friendlyErrorMessage(e: any): string {
+  const raw = String(e?.message || e || '');
+  if (/connection error/i.test(raw)) {
+    return 'Errore di connessione con il servizio IA. Verifica la connessione internet; se il file è molto pesante, prova a ridurne le dimensioni (limite consigliato 20 MB).';
+  }
+  return raw || 'Errore sconosciuto';
+}
+
+export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, groupName }: TopologyModalProps) {
   const [step, setStep] = useState<Step>(1);
   const [graph, setGraph] = useState<TopologyGraph | null>(null);
   const [config, setConfig] = useState<TopologyProjectConfig>({
@@ -48,6 +118,55 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
   const [importedNodes, setImportedNodes] = useState<Node[] | undefined>(undefined);
   const [importedEdges, setImportedEdges] = useState<Edge[] | undefined>(undefined);
 
+  // Bozza — mirror in tempo reale del canvas (anche prima di confermare la topologia)
+  const liveGraphRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
+  const [pendingDraft, setPendingDraft] = useState<TopologyDraft | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+
+  // Al primo apertura del modale, verifica se esiste una bozza per questo progetto
+  useEffect(() => {
+    if (isOpen) {
+      const draft = loadDraft(groupId);
+      setPendingDraft(draft);
+      setDraftSavedAt(null);
+    }
+  }, [isOpen, groupId]);
+
+  const handleSaveDraft = () => {
+    const nodesToSave = step === 1 ? liveGraphRef.current.nodes : (graph?.nodes.map(n => ({ id: n.id, type: n.type, data: { label: n.label }, position: n.position })) ?? []);
+    const edgesToSave = step === 1 ? liveGraphRef.current.edges : (graph?.edges.map(e => ({ id: e.id, source: e.source, target: e.target, type: 'labeled', data: { label: e.label } })) ?? []);
+    const draft: TopologyDraft = {
+      step, step1Mode, config, circuits,
+      nodes: serializeNodes(nodesToSave as Node[]),
+      edges: serializeEdges(edgesToSave as Edge[]),
+      savedAt: new Date().toLocaleString(),
+    };
+    localStorage.setItem(draftKey(groupId), JSON.stringify(draft));
+    setDraftSavedAt(draft.savedAt);
+  };
+
+  const handleResumeDraft = () => {
+    if (!pendingDraft) return;
+    setStep(pendingDraft.step);
+    setStep1Mode(pendingDraft.step1Mode as Step1Mode);
+    setConfig(pendingDraft.config);
+    setCircuits(pendingDraft.circuits);
+    setImportedNodes(draftNodesToRF(pendingDraft.nodes));
+    setImportedEdges(draftEdgesToRF(pendingDraft.edges));
+    if (pendingDraft.nodes.length > 0) {
+      setGraph({
+        nodes: pendingDraft.nodes.map(n => ({ id: n.id, type: n.type as any, label: n.label, position: n.position })),
+        edges: pendingDraft.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label })),
+      });
+    }
+    setPendingDraft(null);
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft(groupId);
+    setPendingDraft(null);
+  };
+
   // Step 4 — unifilar upload
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [unifilarFile, setUnifilarFile] = useState<File | null>(null);
@@ -61,7 +180,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
     setPlantaError(null);
     try {
       const base64 = await fileToBase64(plantaFile);
-      const mime = plantaFile.type as 'image/jpeg' | 'image/png' | 'image/webp';
+      const mime = plantaFile.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'application/pdf';
       const result = await parsePlantaBaixa(base64, mime);
       // Convert grid positions to canvas px
       const rfNodes: Node[] = result.nodes.map(n => ({
@@ -81,7 +200,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
       setImportedEdges(rfEdges);
       setStep1Mode('import-review');
     } catch (e: any) {
-      setPlantaError(e.message || 'Erro desconhecido');
+      setPlantaError(friendlyErrorMessage(e));
     } finally {
       setPlantaLoading(false);
     }
@@ -105,6 +224,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
 
   const handleConfirm = () => {
     onConfirm(circuits, config);
+    clearDraft(groupId);
     // Reset state for next open
     setStep(1);
     setStep1Mode('choose');
@@ -131,7 +251,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
       }));
       setUnifilarDone(true);
     } catch (e: any) {
-      setUnifilarError(e.message || 'Erro desconhecido');
+      setUnifilarError(friendlyErrorMessage(e));
     } finally {
       setUnifilarLoading(false);
     }
@@ -160,8 +280,8 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               <GitBranch size={18} style={{ color: '#81292C' }} />
             </div>
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-widest dark:text-white">Novo Projeto por Topologia</h2>
-              <p className="text-[10px] opacity-40 dark:text-white/40">Desenhe a distribuição e configure as estruturas</p>
+              <h2 className="text-sm font-bold uppercase tracking-widest dark:text-white">Nuovo Progetto per Topologia</h2>
+              <p className="text-[10px] opacity-40 dark:text-white/40">Disegna la distribuzione e configura le strutture</p>
             </div>
 
             {/* Step indicator */}
@@ -185,10 +305,43 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               ))}
             </div>
 
+            <button
+              onClick={handleSaveDraft}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
+              title="Salva lo stato attuale come bozza per riprenderlo più tardi"
+            >
+              <Save size={12} />
+              {draftSavedAt ? 'Bozza salvata' : 'Salva bozza'}
+            </button>
+
             <button onClick={() => { setStep(1); setStep1Mode('choose'); setImportedNodes(undefined); setImportedEdges(undefined); setPlantaFile(null); setUnifilarFile(null); setUnifilarDone(false); onClose(); }} className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors dark:text-white">
               <X size={18} />
             </button>
           </div>
+
+          {/* Bozza trovata */}
+          {pendingDraft && step === 1 && step1Mode === 'choose' && (
+            <div className="flex items-center gap-3 px-6 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 shrink-0">
+              <Clock size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400 flex-1">
+                Trovata una bozza di "{groupName}" salvata il {pendingDraft.savedAt} (passo {pendingDraft.step} — {STEP_LABELS[pendingDraft.step]}).
+              </p>
+              <button
+                onClick={handleResumeDraft}
+                className="px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white shrink-0"
+                style={{ backgroundColor: '#81292C' }}
+              >
+                Riprendi bozza
+              </button>
+              <button
+                onClick={handleDiscardDraft}
+                className="p-1.5 text-amber-600/60 hover:text-amber-700 dark:text-amber-400/60 dark:hover:text-amber-400 transition-colors shrink-0"
+                title="Scarta bozza"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Content */}
           <div className="flex-1 min-h-0 overflow-hidden">
@@ -196,8 +349,8 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               <div className="h-full flex items-center justify-center p-8">
                 <div className="max-w-xl w-full space-y-6">
                   <div className="text-center">
-                    <h3 className="text-sm font-bold dark:text-white mb-1">Como deseja criar a topologia?</h3>
-                    <p className="text-[10px] opacity-40 dark:text-white/40">Escolha o método de entrada da distribuição elétrica</p>
+                    <h3 className="text-sm font-bold dark:text-white mb-1">Come vuoi creare la topologia?</h3>
+                    <p className="text-[10px] opacity-40 dark:text-white/40">Scegli il metodo di inserimento della distribuzione elettrica</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <button
@@ -205,16 +358,16 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       className="p-6 border-2 border-black/10 dark:border-white/10 rounded-2xl text-left hover:border-[#81292C]/50 hover:bg-[#81292C]/5 transition-all group"
                     >
                       <PenLine size={28} className="mb-3 opacity-40 group-hover:opacity-80 transition-opacity dark:text-white" style={{ color: '#81292C' }} />
-                      <p className="text-[11px] font-bold dark:text-white mb-1">Desenhar manualmente</p>
-                      <p className="text-[10px] opacity-40 dark:text-white/40">Crie a topologia arrastando nós e conectando circuitos no canvas interativo</p>
+                      <p className="text-[11px] font-bold dark:text-white mb-1">Disegna manualmente</p>
+                      <p className="text-[10px] opacity-40 dark:text-white/40">Crea la topologia trascinando nodi e collegando circuiti nel canvas interattivo</p>
                     </button>
                     <button
                       onClick={() => setStep1Mode('import-upload')}
                       className="p-6 border-2 border-black/10 dark:border-white/10 rounded-2xl text-left hover:border-[#81292C]/50 hover:bg-[#81292C]/5 transition-all group"
                     >
                       <Map size={28} className="mb-3 opacity-40 group-hover:opacity-80 transition-opacity dark:text-white" style={{ color: '#81292C' }} />
-                      <p className="text-[11px] font-bold dark:text-white mb-1">Importar da planta baixa</p>
-                      <p className="text-[10px] opacity-40 dark:text-white/40">Faça upload da planta de distribuição e a IA extrai a topologia automaticamente para revisão</p>
+                      <p className="text-[11px] font-bold dark:text-white mb-1">Importa dalla planimetria</p>
+                      <p className="text-[10px] opacity-40 dark:text-white/40">Carica la planimetria di distribuzione e l'IA estrae la topologia automaticamente per la revisione</p>
                     </button>
                   </div>
                 </div>
@@ -229,12 +382,12 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       onClick={() => setStep1Mode('choose')}
                       className="text-[10px] font-bold opacity-40 hover:opacity-80 dark:text-white transition-opacity"
                     >
-                      ← Voltar
+                      ← Indietro
                     </button>
-                    <h3 className="text-sm font-bold dark:text-white">Importar planta de distribuição</h3>
+                    <h3 className="text-sm font-bold dark:text-white">Importa planimetria di distribuzione</h3>
                   </div>
                   <p className="text-[10px] opacity-50 dark:text-white/50">
-                    Faça upload da planta baixa ou esquema de distribuição. O Claude Opus irá identificar os painéis, derivações, terminais e circuitos, gerando a topologia automaticamente para você revisar.
+                    Carica la planimetria o lo schema di distribuzione. Claude Opus identificherà i quadri, le derivazioni, i terminali e i circuiti, generando la topologia automaticamente per la revisione.
                   </p>
 
                   <div
@@ -248,24 +401,28 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                     <input
                       ref={plantaInputRef}
                       type="file"
-                      accept="image/jpeg,image/png,image/webp"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
                       className="hidden"
                       onChange={e => {
                         const f = e.target.files?.[0];
-                        if (f) { setPlantaFile(f); setPlantaError(null); }
+                        if (!f) return;
+                        const sizeError = validateFileSize(f);
+                        if (sizeError) { setPlantaFile(null); setPlantaError(sizeError); return; }
+                        setPlantaFile(f);
+                        setPlantaError(null);
                       }}
                     />
                     {plantaFile ? (
                       <div className="space-y-1">
                         <FileImage size={32} className="mx-auto" style={{ color: '#81292C' }} />
                         <p className="text-[11px] font-bold dark:text-white">{plantaFile.name}</p>
-                        <p className="text-[9px] opacity-40 dark:text-white/40">{(plantaFile.size / 1024).toFixed(0)} KB — clique para trocar</p>
+                        <p className="text-[9px] opacity-40 dark:text-white/40">{(plantaFile.size / 1024).toFixed(0)} KB — clic per cambiare</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <Upload size={32} className="mx-auto opacity-30 dark:text-white" />
-                        <p className="text-[11px] font-bold dark:text-white opacity-60">Clique para selecionar a planta</p>
-                        <p className="text-[9px] opacity-30 dark:text-white/30">PNG, JPG ou WEBP</p>
+                        <p className="text-[11px] font-bold dark:text-white opacity-60">Clic per selezionare la planimetria</p>
+                        <p className="text-[9px] opacity-30 dark:text-white/30">PDF, PNG, JPG o WEBP — max {MAX_FILE_SIZE_MB} MB</p>
                       </div>
                     )}
                   </div>
@@ -284,8 +441,8 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                     style={{ backgroundColor: '#81292C' }}
                   >
                     {plantaLoading
-                      ? <><Loader2 size={14} className="animate-spin" /> Analisando planta com IA...</>
-                      : <><Map size={14} /> Analisar com Claude Opus</>
+                      ? <><Loader2 size={14} className="animate-spin" /> Analisi planimetria in corso...</>
+                      : <><Map size={14} /> Analizza con Claude Opus</>
                     }
                   </button>
                 </div>
@@ -298,13 +455,13 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                   <div className="flex items-center gap-3 px-4 py-2 bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-700 shrink-0">
                     <CheckCircle2 size={14} className="text-green-600 dark:text-green-400 shrink-0" />
                     <p className="text-[10px] font-medium text-green-700 dark:text-green-400">
-                      Topologia extraída da planta. Revise os nós e conexões antes de confirmar — arraste, renomeie ou adicione elementos conforme necessário.
+                      Topologia estratta dalla planimetria. Rivedi nodi e connessioni prima di confermare — trascina, rinomina o aggiungi elementi secondo necessità.
                     </p>
                     <button
                       onClick={() => { setStep1Mode('import-upload'); setImportedNodes(undefined); setImportedEdges(undefined); }}
                       className="ml-auto text-[9px] font-bold text-green-600 dark:text-green-400 opacity-60 hover:opacity-100 shrink-0"
                     >
-                      ← Nova importação
+                      ← Nuova importazione
                     </button>
                   </div>
                 )}
@@ -314,6 +471,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                     darkMode={darkMode}
                     defaultNodes={importedNodes}
                     defaultEdges={importedEdges}
+                    onGraphChange={(n, e) => { liveGraphRef.current = { nodes: n, edges: e }; }}
                   />
                 </div>
               </div>
@@ -323,7 +481,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               <div className="h-full overflow-y-auto p-8">
                 <div className="max-w-lg mx-auto space-y-8">
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">TIPO DE ESTRUTURA</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">TIPO DI STRUTTURA</h3>
                     <div className="grid grid-cols-2 gap-3">
                       {(['conduit', 'tray'] as const).map(type => (
                         <button
@@ -335,15 +493,15 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                               : 'border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20'
                           }`}
                         >
-                          <p className="text-[11px] font-bold dark:text-white">{type === 'conduit' ? 'Cavidotto (Eletroduto)' : 'Passerella (Eletrocalha)'}</p>
-                          <p className="text-[10px] opacity-40 dark:text-white/40 mt-0.5">{type === 'conduit' ? 'Tubos circulares' : 'Calhas abertas'}</p>
+                          <p className="text-[11px] font-bold dark:text-white">{type === 'conduit' ? 'Cavidotto (Tubo protettivo)' : 'Passerella portacavi'}</p>
+                          <p className="text-[10px] opacity-40 dark:text-white/40 mt-0.5">{type === 'conduit' ? 'Tubi circolari' : 'Canale aperto'}</p>
                         </button>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">PERCENTUAL DE OCUPAÇÃO (%)</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">PERCENTUALE DI OCCUPAZIONE (%)</h3>
                     <div className="flex items-center gap-4">
                       <input
                         type="range" min={20} max={80} step={5}
@@ -356,14 +514,14 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                   </div>
 
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">DIMENSÃO FIXA <span className="text-[9px] normal-case opacity-60">(deixe vazio para dimensionamento automático)</span></h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">DIMENSIONE FISSA <span className="text-[9px] normal-case opacity-60">(lascia vuoto per dimensionamento automatico)</span></h3>
                     {config.structureType === 'conduit' ? (
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => setConfig(c => ({ ...c, fixedDimension: null }))}
                           className={`px-3 py-1.5 text-[10px] font-bold rounded border transition-all ${!config.fixedDimension ? 'bg-[#81292C] text-white border-[#81292C]' : 'border-black/20 dark:border-white/20 dark:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                         >
-                          AUTO
+                          AUTOMATICO
                         </button>
                         {CONDUIT_STANDARD_SIZES.map(d => (
                           <button
@@ -381,7 +539,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                           onClick={() => setConfig(c => ({ ...c, fixedDimension: null }))}
                           className={`px-3 py-1.5 text-[10px] font-bold rounded border transition-all ${!config.fixedDimension ? 'bg-[#81292C] text-white border-[#81292C]' : 'border-black/20 dark:border-white/20 dark:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                         >
-                          AUTO
+                          AUTOMATICO
                         </button>
                         {TRAY_STANDARD_WIDTHS.map(w => (
                           <button
@@ -397,7 +555,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                   </div>
 
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">TUBOS / ESTRUTURAS DE RESERVA</h3>
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">TUBI / STRUTTURE DI RISERVA</h3>
                     <div className="flex items-center gap-3">
                       {[0, 1, 2, 3].map(n => (
                         <button
@@ -413,12 +571,12 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
 
                   {config.structureType === 'tray' && (
                     <div>
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">SETTO SEPARADOR</h3>
+                      <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-4">SETTO SEPARATORE</h3>
                       <button
                         onClick={() => setConfig(c => ({ ...c, hasSeparator: !c.hasSeparator }))}
                         className={`px-4 py-2 text-[10px] font-bold border-2 rounded-lg transition-all ${config.hasSeparator ? 'bg-[#81292C] text-white border-[#81292C]' : 'border-black/20 dark:border-white/20 dark:text-white'}`}
                       >
-                        {config.hasSeparator ? 'COM setto' : 'SEM setto'}
+                        {config.hasSeparator ? 'CON setto' : 'SENZA setto'}
                       </button>
                     </div>
                   )}
@@ -428,14 +586,14 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       onClick={() => setStep(1)}
                       className="py-3 px-5 text-[11px] font-bold border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
                     >
-                      ← Voltar ao desenho
+                      ← Torna al disegno
                     </button>
                     <button
                       onClick={handleConfigNext}
                       className="flex-1 py-3 text-[11px] font-bold text-white rounded-xl transition-all flex items-center justify-center gap-2"
                       style={{ backgroundColor: '#81292C' }}
                     >
-                      Avançar para Revisão <ChevronRight size={14} />
+                      Avanza alla Revisione <ChevronRight size={14} />
                     </button>
                   </div>
                 </div>
@@ -446,18 +604,18 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               <div className="h-full overflow-y-auto p-8">
                 <div className="max-w-2xl mx-auto space-y-6">
                   <div className="p-4 rounded-xl bg-[#401318]/5 dark:bg-[#401318]/10 border border-[#401318]/10">
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3 dark:text-white">Configuração</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest mb-3 dark:text-white">Configurazione</h3>
                     <div className="grid grid-cols-3 gap-4 text-[10px] dark:text-white/80">
                       <div><span className="opacity-40">Tipo</span><br /><strong>{config.structureType === 'conduit' ? 'Cavidotto' : 'Passerella'}</strong></div>
-                      <div><span className="opacity-40">Ocupação</span><br /><strong>{config.fillLimit}%</strong></div>
-                      <div><span className="opacity-40">Dimensão</span><br /><strong>{config.fixedDimension ? `${config.fixedDimension.width}mm` : 'Automática'}</strong></div>
-                      <div><span className="opacity-40">Reserva</span><br /><strong>{config.spareTubes} tubo(s)</strong></div>
-                      {config.structureType === 'tray' && <div><span className="opacity-40">Setto</span><br /><strong>{config.hasSeparator ? 'Sim' : 'Não'}</strong></div>}
+                      <div><span className="opacity-40">Occupazione</span><br /><strong>{config.fillLimit}%</strong></div>
+                      <div><span className="opacity-40">Dimensione</span><br /><strong>{config.fixedDimension ? `${config.fixedDimension.width}mm` : 'Automatica'}</strong></div>
+                      <div><span className="opacity-40">Riserva</span><br /><strong>{config.spareTubes} tubo/i</strong></div>
+                      {config.structureType === 'tray' && <div><span className="opacity-40">Setto</span><br /><strong>{config.hasSeparator ? 'Sì' : 'No'}</strong></div>}
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-3">CIRCUITOS IDENTIFICADOS ({circuits.length})</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-3">CIRCUITI IDENTIFICATI ({circuits.length})</h3>
                     <div className="space-y-2">
                       {circuits.map(c => (
                         <div key={c.id} className="flex items-center gap-4 p-3 border border-black/10 dark:border-white/10 rounded-lg dark:text-white">
@@ -465,7 +623,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                           <span className="text-[10px] opacity-60">{c.from}</span>
                           <span className="text-[9px] opacity-30 mx-1">→</span>
                           <span className="text-[10px] opacity-60">{c.to}</span>
-                          <span className="ml-auto text-[9px] opacity-30 italic">cabos a definir</span>
+                          <span className="ml-auto text-[9px] opacity-30 italic">cavi da definire</span>
                         </div>
                       ))}
                     </div>
@@ -473,7 +631,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
 
                   <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
                     <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400">
-                      <strong>Próximo passo:</strong> O projeto será criado com as estruturas listadas acima. Em seguida, você poderá adicionar os cabos de cada circuito manualmente ou via leitura do unifilar com IA.
+                      <strong>Prossimo passo:</strong> Il progetto verrà creato con le strutture elencate sopra. In seguito potrai aggiungere i cavi di ogni circuito manualmente o tramite lettura dello schema unifilare con IA.
                     </p>
                   </div>
 
@@ -482,13 +640,13 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       onClick={() => setStep(2)}
                       className="flex-1 py-3 text-[11px] font-bold border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
                     >
-                      ← Voltar
+                      ← Indietro
                     </button>
                     <button
                       onClick={handleConfirm}
                       className="py-3 px-6 text-[11px] font-bold border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
                     >
-                      Criar sem cabos
+                      Crea senza cavi
                     </button>
                     <button
                       onClick={() => setStep(4)}
@@ -496,7 +654,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       style={{ backgroundColor: '#81292C' }}
                     >
                       <FileImage size={14} />
-                      Ler unifilar com IA
+                      Leggi unifilare con IA
                     </button>
                   </div>
                 </div>
@@ -506,8 +664,8 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
               <div className="h-full overflow-y-auto p-8">
                 <div className="max-w-lg mx-auto space-y-6">
                   <div>
-                    <h3 className="text-sm font-bold dark:text-white mb-1">Leitura automática do unifilar</h3>
-                    <p className="text-[10px] opacity-50 dark:text-white/50">Faça o upload do esquema unifilar. A IA (Claude Opus) irá extrair os tipos de cabos, seções e quantidades de cada circuito automaticamente.</p>
+                    <h3 className="text-sm font-bold dark:text-white mb-1">Lettura automatica dello schema unifilare</h3>
+                    <p className="text-[10px] opacity-50 dark:text-white/50">Carica lo schema unifilare. L'IA (Claude Opus) estrarrà i tipi di cavi, le sezioni e le quantità di ogni circuito automaticamente.</p>
                   </div>
 
                   {/* File drop zone */}
@@ -526,20 +684,25 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       className="hidden"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
-                        if (f) { setUnifilarFile(f); setUnifilarDone(false); setUnifilarError(null); }
+                        if (!f) return;
+                        const sizeError = validateFileSize(f);
+                        if (sizeError) { setUnifilarFile(null); setUnifilarDone(false); setUnifilarError(sizeError); return; }
+                        setUnifilarFile(f);
+                        setUnifilarDone(false);
+                        setUnifilarError(null);
                       }}
                     />
                     {unifilarFile ? (
                       <div className="space-y-1">
                         <FileImage size={28} className="mx-auto" style={{ color: '#81292C' }} />
                         <p className="text-[11px] font-bold dark:text-white">{unifilarFile.name}</p>
-                        <p className="text-[9px] opacity-40 dark:text-white/40">{(unifilarFile.size / 1024).toFixed(0)} KB — clique para trocar</p>
+                        <p className="text-[9px] opacity-40 dark:text-white/40">{(unifilarFile.size / 1024).toFixed(0)} KB — clic per cambiare</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
                         <Upload size={28} className="mx-auto opacity-30 dark:text-white" />
-                        <p className="text-[11px] font-bold dark:text-white opacity-60">Clique para selecionar o unifilar</p>
-                        <p className="text-[9px] opacity-30 dark:text-white/30">JPG, PNG ou WEBP</p>
+                        <p className="text-[11px] font-bold dark:text-white opacity-60">Clic per selezionare l'unifilare</p>
+                        <p className="text-[9px] opacity-30 dark:text-white/30">JPG, PNG o WEBP — max {MAX_FILE_SIZE_MB} MB</p>
                       </div>
                     )}
                   </div>
@@ -554,7 +717,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                   {unifilarDone && (
                     <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700">
                       <p className="text-[10px] font-bold text-green-700 dark:text-green-400">
-                        ✓ Cabos extraídos com sucesso! Verifique os circuitos abaixo antes de criar o projeto.
+                        ✓ Cavi estratti con successo! Verifica i circuiti qui sotto prima di creare il progetto.
                       </p>
                       <div className="mt-2 space-y-1">
                         {circuits.map(c => (
@@ -562,7 +725,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                             <span className="font-black" style={{ color: '#81292C' }}>{c.id}</span>
                             {c.cables && c.cables.length > 0
                               ? c.cables.map((cb, i) => <span key={i} className="ml-2 opacity-60">{cb.quantity}× {cb.name} {cb.section}mm² ({cb.conductors}C)</span>)
-                              : <span className="ml-2 opacity-30 italic">nenhum cabo identificado</span>
+                              : <span className="ml-2 opacity-30 italic">nessun cavo identificato</span>
                             }
                           </div>
                         ))}
@@ -575,14 +738,14 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       onClick={() => setStep(3)}
                       className="py-3 px-5 text-[11px] font-bold border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
                     >
-                      ← Voltar
+                      ← Indietro
                     </button>
                     <button
                       onClick={handleUnifilarUpload}
                       disabled={!unifilarFile || unifilarLoading}
                       className="flex-1 py-3 text-[11px] font-bold border border-[#81292C]/50 text-[#81292C] rounded-xl hover:bg-[#81292C]/5 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
                     >
-                      {unifilarLoading ? <><Loader2 size={14} className="animate-spin" /> Analisando...</> : <><Upload size={14} /> Analisar com IA</>}
+                      {unifilarLoading ? <><Loader2 size={14} className="animate-spin" /> Analisi in corso...</> : <><Upload size={14} /> Analizza con IA</>}
                     </button>
                     <button
                       onClick={handleConfirm}
@@ -590,7 +753,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode }: Topology
                       style={{ backgroundColor: '#81292C' }}
                     >
                       <CheckCircle2 size={14} />
-                      Criar Projeto
+                      Crea Progetto
                     </button>
                   </div>
                 </div>

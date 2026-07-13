@@ -47,6 +47,18 @@ export interface Project {
   projectCables: ProjectCable[];
   lastSaved?: string;
   notes?: string;
+  /** Progetto "ombrello" a cui appartiene questa struttura (es. "LA SUVERA"). */
+  groupId?: string;
+}
+
+/**
+ * Progetto ombrello (es. cantiere/cliente "LA SUVERA") che raggruppa più
+ * strutture (Project) create al suo interno — passerelle, cavidotti, ecc.
+ */
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  lastSaved?: string;
 }
 
 // ─── Topology Editor ─────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, BarChart3, ArrowRight, Zap, Moon, Sun } from 'lucide-react';
+import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun } from 'lucide-react';
 
 const MODULES = [
   {
@@ -27,6 +27,18 @@ const MODULES = [
     accent: '#2d6a4f',
     primary: '#1a3a2a',
     tags: ['Carichi per zona', 'Residenziale', 'Commerciale', 'Previsione IA'],
+  },
+  {
+    id: 'panel-schedule',
+    route: '/panel-schedule',
+    name: 'Relazione di Calcolo Elettrico',
+    tagline: 'Schema unifilare → tabella di calcolo Excel',
+    description:
+      "Carica uno o più schemi unifilari e ottieni automaticamente la tabella di calcolo del quadro elettrico, pronta per l'esportazione in Excel.",
+    icon: Table2,
+    accent: '#1f7a8c',
+    primary: '#0d2b3a',
+    tags: ['Schema Unifilare', 'Export Excel', 'Lettura IA', 'Quadri'],
   },
 ] as const;
 
@@ -97,7 +109,7 @@ export function ModuleSelector() {
         </motion.div>
 
         {/* Module cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 w-full max-w-5xl">
           {MODULES.map((mod, i) => {
             const Icon = mod.icon;
             return (

@@ -29,9 +29,9 @@ export function SourceNode({ data, selected }: NodeProps) {
           {(data.label as string) || 'FONTE'}
         </span>
       )}
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="source" position={Position.Left} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="right" type="source" position={Position.Right} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="left" type="source" position={Position.Left} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
     </div>
   );
 }
@@ -44,10 +44,10 @@ export function JunctionNode({ selected }: NodeProps) {
         selected ? 'border-[#81292C] shadow-lg shadow-[#81292C]/20' : 'border-black/60 dark:border-white/60'
       }`}
     >
-      <Handle type="target" position={Position.Top}    style={{ top: '-6px', left: '50%', transform: 'translateX(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="source" position={Position.Bottom} style={{ bottom: '-6px', left: '50%', transform: 'translateX(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="source" position={Position.Right}  style={{ right: '-6px', top: '50%', transform: 'translateY(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="source" position={Position.Left}   style={{ left: '-6px', top: '50%', transform: 'translateY(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="top"    type="target" position={Position.Top}    style={{ top: '-6px', left: '50%', transform: 'translateX(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="bottom" type="source" position={Position.Bottom} style={{ bottom: '-6px', left: '50%', transform: 'translateX(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="right"  type="source" position={Position.Right}  style={{ right: '-6px', top: '50%', transform: 'translateY(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="left"   type="source" position={Position.Left}   style={{ left: '-6px', top: '50%', transform: 'translateY(-50%) rotate(-45deg)' }} className="!w-2.5 !h-2.5 !bg-[#81292C] !border-2 !border-white" />
     </div>
   );
 }
@@ -80,10 +80,10 @@ export function TerminalNode({ data, selected }: NodeProps) {
           {(data.label as string) || 'DESTINO'}
         </span>
       )}
-      <Handle type="target" position={Position.Left}   className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="target" position={Position.Top}    className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="target" position={Position.Bottom} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
-      <Handle type="target" position={Position.Right}  className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="left"   type="target" position={Position.Left}   className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="top"    type="target" position={Position.Top}    className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="bottom" type="target" position={Position.Bottom} className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
+      <Handle id="right"  type="target" position={Position.Right}  className="!w-3 !h-3 !bg-[#81292C] !border-2 !border-white" />
     </div>
   );
 }

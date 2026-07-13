@@ -6,7 +6,7 @@ import { useProject } from '../../context/ProjectContext';
 import { TRANSLATIONS } from '../../constants';
 // Icons
 import {
-  LayoutDashboard, Layers, CircleDot, Database, ChevronLeft, Save, Folder, LogOut, Sun, Moon, Keyboard, Plus, Zap, User as UserIcon, X, Download, FileText, Globe, GitBranch
+  LayoutDashboard, Layers, CircleDot, Database, ChevronLeft, Save, Folder, LogOut, Sun, Moon, Keyboard, Plus, Zap, User as UserIcon, X, Download, FileText, Globe, GitBranch, FolderKanban, ChevronDown, Trash2, Check
 } from 'lucide-react';
 import { Cable, StandardStructure, TopologyCircuit, TopologyProjectConfig } from '../../types';
 import { Toast } from '../Toast';
@@ -56,6 +56,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const { darkMode, setDarkMode, activeTab, setActiveTab, moduleTheme, toastData, showToast } = useApp();
   const { user, setUser } = useAuth();
   const {
+    projectGroups,
+    activeGroupId,
+    activeGroup,
+    setActiveGroupId,
+    createProjectGroup,
+    renameProjectGroup,
+    deleteProjectGroup,
     projects,
     activeProject,
     activeProjectId,
@@ -70,10 +77,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   } = useProject();
 
   const [isTopologyModalOpen, setIsTopologyModalOpen] = useState(false);
+  const [isGroupMenuOpen, setIsGroupMenuOpen] = useState(false);
+  const [editingGroupName, setEditingGroupName] = useState(false);
 
   const handleTopologyConfirm = (circuits: TopologyCircuit[], config: TopologyProjectConfig) => {
     addProjectsFromTopology(circuits, config);
-    showToast(`${circuits.length} circuito(s) criado(s) com sucesso!`, 'success');
+    showToast(`${circuits.length} circuito/i creato/i con successo!`, 'success');
   };
 
   const t = TRANSLATIONS;
@@ -271,7 +280,80 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
           </div>
         </header>
 
-        {/* Project Tabs - Always Visible */}
+        {/* Progetto (ombrello) — es. "LA SUVERA" */}
+        <div className="bg-[#efefef] dark:bg-[#0f0f0f] border-b border-black/5 dark:border-white/5 px-8 py-2.5 flex items-center gap-3 transition-colors shrink-0 relative">
+          <FolderKanban size={14} style={{ color: moduleTheme.accent }} />
+          <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest shrink-0">Progetto</span>
+
+          {editingGroupName ? (
+            <input
+              autoFocus
+              defaultValue={activeGroup.name}
+              onBlur={(e) => { renameProjectGroup(activeGroupId, e.target.value.toUpperCase() || activeGroup.name); setEditingGroupName(false); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              className="bg-white dark:bg-white/10 border border-black/10 dark:border-white/10 rounded px-2 py-1 text-[11px] font-black uppercase tracking-tight outline-none dark:text-white"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingGroupName(true)}
+              className="text-[11px] font-black uppercase tracking-tight dark:text-white hover:opacity-70 transition-opacity"
+              title="Clic per rinominare"
+            >
+              {activeGroup.name}
+            </button>
+          )}
+
+          <div className="relative">
+            <button
+              onClick={() => setIsGroupMenuOpen(o => !o)}
+              className="p-1 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-black/40 dark:text-white/40"
+              title="Cambia progetto"
+            >
+              <ChevronDown size={14} />
+            </button>
+            {isGroupMenuOpen && (
+              <div className="fixed inset-0 z-40" onClick={() => setIsGroupMenuOpen(false)} />
+            )}
+            {isGroupMenuOpen && (
+              <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 rounded-xl shadow-lg z-50 py-1.5 max-h-72 overflow-y-auto custom-scrollbar">
+                {projectGroups.map(g => (
+                  <div key={g.id} className="flex items-center group">
+                    <button
+                      onClick={() => { setActiveGroupId(g.id); setIsGroupMenuOpen(false); }}
+                      className={`flex-1 flex items-center gap-2 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        g.id === activeGroupId ? 'text-[#81292C]' : 'dark:text-white hover:bg-black/5 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      {g.id === activeGroupId && <Check size={12} />}
+                      <span className="truncate">{g.name}</span>
+                    </button>
+                    {projectGroups.length > 1 && (
+                      <button
+                        onClick={() => deleteProjectGroup(g.id)}
+                        className="p-1.5 mr-2 opacity-0 group-hover:opacity-100 text-black/30 hover:text-[#81292C] transition-all shrink-0"
+                        title="Elimina progetto"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="border-t border-black/5 dark:border-white/5 mt-1 pt-1">
+                  <button
+                    onClick={() => { createProjectGroup(); setIsGroupMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider dark:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    style={{ color: moduleTheme.accent }}
+                  >
+                    <Plus size={12} />
+                    Nuovo progetto
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Struttura Tabs - Always Visible */}
         <div className="bg-white dark:bg-[#141414] border-b border-black/5 dark:border-white/5 px-8 flex items-center gap-6 overflow-x-auto custom-scrollbar transition-colors shrink-0">
           <div className="flex items-center gap-2 border-r border-black/5 dark:border-white/5 pr-6 py-4 shrink-0">
             <Folder size={14} className="opacity-40" />
@@ -367,6 +449,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         onClose={() => setIsTopologyModalOpen(false)}
         onConfirm={handleTopologyConfirm}
         darkMode={darkMode}
+        groupId={activeGroupId}
+        groupName={activeGroup.name}
       />
     </div>
   );

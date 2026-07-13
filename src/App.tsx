@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ModuleSelector } from './launcher/ModuleSelector';
 import { CableFillApp } from './modules/cablefill/CableFillApp';
 import { LoadAnalysisApp } from './modules/load-analysis/LoadAnalysisApp';
+import { PanelScheduleApp } from './modules/panel-schedule/PanelScheduleApp';
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
         <Route path="/" element={<ModuleSelector />} />
         <Route path="/cablefill/*" element={<CableFillApp />} />
         <Route path="/load-analysis/*" element={<LoadAnalysisApp />} />
+        <Route path="/panel-schedule/*" element={<PanelScheduleApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

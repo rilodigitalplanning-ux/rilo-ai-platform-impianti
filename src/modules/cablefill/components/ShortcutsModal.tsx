@@ -34,7 +34,7 @@ export function ShortcutsModal({ isOpen, onClose, t }: { isOpen: boolean, onClos
                 <div className="w-10 h-10 bg-[#81292C]/10 rounded-xl flex items-center justify-center text-[#81292C]">
                   <Keyboard size={20} />
                 </div>
-                <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Atalhos de Teclado</h2>
+                <h2 className="text-xl font-bold dark:text-white uppercase tracking-tight">Scorciatoie da Tastiera</h2>
               </div>
               <button onClick={onClose} className="p-2 text-black/40 dark:text-white/40 hover:text-black dark:hover:text-white transition-colors rounded-full hover:bg-black/5 dark:hover:bg-white/5">
                 <X size={20} />

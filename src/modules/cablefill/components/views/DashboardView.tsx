@@ -176,6 +176,19 @@ export const DashboardView = () => {
     setProjectCables(prev => prev.map((pc, i) => i === index ? { ...pc, color } : pc));
   };
 
+  const updateCablesColorBatch = (ids: string[], color: string) => {
+    setProjectCables(prev => prev.map(pc => ids.includes(pc.id) ? { ...pc, color } : pc));
+  };
+
+  const updateCablesTagBatch = (ids: string[], tag: string) => {
+    setProjectCables(prev => prev.map(pc => ids.includes(pc.id) ? { ...pc, tag } : pc));
+  };
+
+  const removeCablesBatch = (ids: string[]) => {
+    setProjectCables(prev => prev.filter(pc => !ids.includes(pc.id)));
+    showToast(`${ids.length} cavi eliminati`, 'success');
+  };
+
   const handleExportPDF = () => {
     const today = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
     const reportId = `EP-${new Date().getFullYear()}-X${Math.floor(Math.random() * 999)}`;
@@ -547,7 +560,7 @@ export const DashboardView = () => {
                   type="text"
                   value={structure.name || ''}
                   onChange={(e) => setStructure(s => ({ ...s, name: e.target.value.toUpperCase() }))}
-                  placeholder="EX: ESTRUTURA 01"
+                  placeholder="ES: STRUTTURA 01"
                   className="w-full bg-[#efefef] dark:bg-white/5 border-none rounded text-[10px] font-bold py-3 px-4 outline-none focus:outline-none focus:ring-2 focus:ring-[#81292C]/50 focus:ring-offset-2 dark:focus:ring-offset-[#141414] dark:text-white uppercase"
                 />
               </div>
@@ -795,10 +808,10 @@ export const DashboardView = () => {
               </div>
 
               <div className="max-h-64 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                <CableList 
-                  projectCables={projectCables.filter(pc => 
-                    !cableSearch || 
-                    pc.cable.name.toLowerCase().includes(cableSearch.toLowerCase()) || 
+                <CableList
+                  projectCables={projectCables.filter(pc =>
+                    !cableSearch ||
+                    pc.cable.name.toLowerCase().includes(cableSearch.toLowerCase()) ||
                     pc.tag?.toLowerCase().includes(cableSearch.toLowerCase())
                   )}
                   updateCableTag={updateCableTag}
@@ -806,6 +819,9 @@ export const DashboardView = () => {
                   removeCable={removeCable}
                   replaceCable={replaceCable}
                   duplicateCable={duplicateCable}
+                  updateCablesColorBatch={updateCablesColorBatch}
+                  updateCablesTagBatch={updateCablesTagBatch}
+                  removeCablesBatch={removeCablesBatch}
                   customCables={customCables}
                   t={t}
                   sensors={sensors}

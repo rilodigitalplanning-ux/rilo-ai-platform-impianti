@@ -12,6 +12,17 @@ export type UserProfile = {
 const ALL_MODULES = ['cablefill'];
 const ADMIN_EMAIL = 'rafael.azevedo.93@live.com';
 
+// ── Auth bypass: utente fisso senza login ──────────────────────────────────
+const BYPASS_USER: UserProfile = {
+  id:                 '00000000-0000-0000-0000-000000000001',
+  email:              'r.azevedo@rilodp.it',
+  name:               'Rafael Azevedo',
+  role:               'admin',
+  accessible_modules: ALL_MODULES,
+};
+const AUTH_BYPASS = true; // cambia a false per riattivare il login
+// ──────────────────────────────────────────────────────────────────────────
+
 /** Patch a parsed user profile: if it's the admin, always give all modules */
 function patchAdminModules(parsed: any): any {
   if (parsed?.email === ADMIN_EMAIL) {
@@ -32,6 +43,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
+    if (AUTH_BYPASS) return BYPASS_USER;
     const saved = localStorage.getItem('cablefill_user');
     if (saved) {
       try {
@@ -51,9 +63,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     return null;
   });
-  const [isSessionVerified, setIsSessionVerified] = useState(false);
+  const [isSessionVerified, setIsSessionVerified] = useState(AUTH_BYPASS);
 
   useEffect(() => {
+    if (AUTH_BYPASS) return;
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
       if (error) {
         if (error.message?.includes('Refresh Token Not Found') || error.message?.includes('invalid_grant')) {

@@ -1,9 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import { Project, Structure, ProjectCable, TopologyCircuit, TopologyProjectConfig } from '../types';
+import { Project, ProjectGroup, Structure, ProjectCable, TopologyCircuit, TopologyProjectConfig } from '../types';
 import { useAuth } from './AuthContext';
 
+const DEFAULT_GROUP_NAME = 'NUOVO PROGETTO';
+
 interface ProjectContextType {
+  // Progetto (ombrello, es. "LA SUVERA")
+  projectGroups: ProjectGroup[];
+  activeGroupId: string;
+  activeGroup: ProjectGroup;
+  setActiveGroupId: (id: string) => void;
+  createProjectGroup: (name?: string) => void;
+  renameProjectGroup: (id: string, name: string) => void;
+  deleteProjectGroup: (id: string) => Promise<void>;
+
+  // Strutture (Project) all'interno del progetto attivo
   projects: Project[];
   setProjects: React.Dispatch<React.SetStateAction<Project[]>>;
   activeProjectId: string;
@@ -13,6 +25,7 @@ interface ProjectContextType {
   updateActiveProject: (updates: Partial<Project>) => void;
   saveProject: (showToast: (msg: string, type: 'success' | 'error') => void, t: any) => Promise<void>;
   loadProject: (project: Project) => void;
+  loadAllInGroup: (groupId: string) => void;
   deleteSavedProject: (id: string) => Promise<void>;
   renameProject: (id: string, newName: string) => void;
   addNewProject: (t: any) => void;
@@ -25,25 +38,56 @@ interface ProjectContextType {
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
+function makeBlankStructure(groupId: string): Project {
+  return {
+    id: crypto.randomUUID(),
+    name: 'NUOVA STRUTTURA',
+    groupId,
+    structure: { id: crypto.randomUUID(), type: 'tray', width: 300, height: 100, fillLimit: 40 },
+    projectCables: [],
+  };
+}
+
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const { user, isSessionVerified } = useAuth();
-  
-  const [projects, setProjects] = useState<Project[]>([{
-    id: crypto.randomUUID(),
-    name: 'NUOVO PROGETTO',
-    structure: { id: crypto.randomUUID(), type: 'tray', width: 300, height: 100, fillLimit: 40 },
-    projectCables: []
-  }]);
-  
+
+  const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>(() => [
+    { id: crypto.randomUUID(), name: DEFAULT_GROUP_NAME },
+  ]);
+  const [activeGroupId, setActiveGroupIdState] = useState(projectGroups[0].id);
+
+  const [projects, setProjects] = useState<Project[]>(() => [makeBlankStructure(projectGroups[0].id)]);
   const [activeProjectId, setActiveProjectId] = useState(projects[0].id);
   const [savedProjects, setSavedProjects] = useState<Project[]>([]);
 
-  const activeProject = useMemo(() => 
-    projects.find(p => p.id === activeProjectId) || projects[0], 
+  const activeGroup = useMemo(() =>
+    projectGroups.find(g => g.id === activeGroupId) || projectGroups[0],
+  [projectGroups, activeGroupId]);
+
+  const activeProject = useMemo(() =>
+    projects.find(p => p.id === activeProjectId) || projects[0],
   [projects, activeProjectId]);
 
+  // ── Caricamento dati utente (progetti + strutture salvate) ──────────────────
   useEffect(() => {
     if (user && isSessionVerified) {
+      supabase
+        .from('ProjectGroup')
+        .select('*')
+        .eq('userId', user.id)
+        .order('lastSaved', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching project groups:', error);
+            return;
+          }
+          if (data && data.length > 0) {
+            const groups: ProjectGroup[] = data.map(g => ({ id: g.id, name: g.name, lastSaved: g.lastSaved }));
+            setProjectGroups(groups);
+            setActiveGroupIdState(groups[0].id);
+          }
+        });
+
       supabase
         .from('Project')
         .select('*')
@@ -75,20 +119,18 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
               }
             };
 
-            const parsedProjects = data.map(p => ({
+            const parsedProjects: Project[] = data.map(p => ({
               id: p.id,
               name: p.name,
+              groupId: p.groupId || undefined,
               structure: safeParse(p.structure, { type: 'tray', width: 300, height: 100, fillLimit: 40 }),
               projectCables: safeParseArray(p.projectCables, []),
               lastSaved: p.lastSaved,
-              notes: p.notes
+              notes: p.notes,
             }));
-            
+
             setSavedProjects(parsedProjects);
-            if (parsedProjects.length > 0 && projects.length === 1 && projects[0].name === 'NUOVO PROGETTO' && projects[0].projectCables.length === 0) {
-              setProjects([parsedProjects[0]]);
-              setActiveProjectId(parsedProjects[0].id);
-            }
+            // Sempre inizia con una struttura vuota — nessun auto-caricamento dell'ultimo stato
           }
         });
     } else if (!user && isSessionVerified) {
@@ -107,6 +149,60 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeProject]);
 
+  // ── Gestione Progetto (ombrello) ─────────────────────────────────────────────
+  const setActiveGroupId = (id: string) => {
+    setActiveGroupIdState(id);
+    // Popola le tab con le strutture già salvate per questo progetto, o una vuota
+    const groupStructures = savedProjects.filter(p => p.groupId === id);
+    if (groupStructures.length > 0) {
+      setProjects(groupStructures.map(p => ({ ...p })));
+      setActiveProjectId(groupStructures[0].id);
+    } else {
+      const blank = makeBlankStructure(id);
+      setProjects([blank]);
+      setActiveProjectId(blank.id);
+    }
+  };
+
+  const createProjectGroup = (name?: string) => {
+    const newGroup: ProjectGroup = { id: crypto.randomUUID(), name: (name || 'NUOVO PROGETTO').toUpperCase() };
+    setProjectGroups(prev => [newGroup, ...prev]);
+    setActiveGroupId(newGroup.id);
+  };
+
+  const renameProjectGroup = (id: string, name: string) => {
+    setProjectGroups(prev => prev.map(g => g.id === id ? { ...g, name } : g));
+    if (user) {
+      supabase.from('ProjectGroup').update({ name }).eq('id', id).then(({ error }) => {
+        if (error) console.error('Error renaming project group:', error);
+      });
+    }
+  };
+
+  const deleteProjectGroup = async (id: string) => {
+    if (projectGroups.length <= 1) return;
+    try {
+      // Elimina anche le strutture appartenenti al progetto
+      await supabase.from('Project').delete().eq('groupId', id);
+      const { error } = await supabase.from('ProjectGroup').delete().eq('id', id);
+      if (error) {
+        console.error('Error deleting project group:', error);
+        return;
+      }
+      setSavedProjects(prev => prev.filter(p => p.groupId !== id));
+      setProjectGroups(prev => {
+        const next = prev.filter(g => g.id !== id);
+        if (activeGroupId === id && next.length > 0) {
+          setActiveGroupId(next[0].id);
+        }
+        return next;
+      });
+    } catch (error) {
+      console.error('Error deleting project group:', error);
+    }
+  };
+
+  // ── Gestione Struttura (Project) ────────────────────────────────────────────
   const updateActiveProject = (updates: Partial<Project>) => {
     setProjects(prev => prev.map(p => p.id === activeProjectId ? { ...p, ...updates } : p));
   };
@@ -117,22 +213,28 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     const now = new Date().toLocaleString();
-    const updatedProject = { ...activeProject, lastSaved: now };
-    
+    const updatedProject = { ...activeProject, groupId: activeProject.groupId || activeGroupId, lastSaved: now };
+
     try {
+      // Assicura che il progetto ombrello esista lato Supabase prima della struttura (FK)
+      await supabase.from('ProjectGroup').upsert({ id: activeGroupId, name: activeGroup.name, lastSaved: now, userId: user.id });
+      setProjectGroups(prev => prev.map(g => g.id === activeGroupId ? { ...g, lastSaved: now } : g));
+
       const { error } = await supabase
         .from('Project')
         .upsert({
           id: updatedProject.id,
           name: updatedProject.name,
+          groupId: updatedProject.groupId,
           structure: JSON.stringify(updatedProject.structure),
           projectCables: JSON.stringify(updatedProject.projectCables),
           lastSaved: updatedProject.lastSaved,
           notes: updatedProject.notes,
           userId: user.id
         });
-      
+
       if (!error) {
+        updateActiveProject({ groupId: updatedProject.groupId, lastSaved: now });
         setSavedProjects(prev => {
           const existingIndex = prev.findIndex(p => p.id === updatedProject.id);
           if (existingIndex >= 0) {
@@ -152,6 +254,18 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const loadProject = (project: Project) => {
+    const targetGroupId = project.groupId || activeGroupId;
+    if (targetGroupId !== activeGroupId) {
+      // Cambia progetto: sostituisce le tab aperte con le strutture salvate
+      // di quel progetto, per non mischiare strutture di progetti diversi.
+      const groupStructures = savedProjects.filter(p => p.groupId === targetGroupId);
+      const alreadyIncluded = groupStructures.some(p => p.id === project.id);
+      const nextProjects = alreadyIncluded ? groupStructures : [...groupStructures, project];
+      setActiveGroupIdState(targetGroupId);
+      setProjects(nextProjects);
+      setActiveProjectId(project.id);
+      return;
+    }
     setProjects(prev => {
       if (prev.find(p => p.id === project.id)) {
         setActiveProjectId(project.id);
@@ -163,13 +277,21 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const loadAllInGroup = (groupId: string) => {
+    const groupStructures = savedProjects.filter(p => p.groupId === groupId);
+    if (groupStructures.length === 0) return;
+    setActiveGroupIdState(groupId);
+    setProjects(groupStructures.map(p => ({ ...p })));
+    setActiveProjectId(groupStructures[0].id);
+  };
+
   const deleteSavedProject = async (id: string) => {
     try {
       const { error } = await supabase
         .from('Project')
         .delete()
         .eq('id', id);
-        
+
       if (!error) {
         setSavedProjects(prev => prev.filter(p => p.id !== id));
       } else {
@@ -189,6 +311,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     const newProject: Project = {
       id: newId,
       name: `${t.preview.project.toUpperCase()} ${projects.length + 1}`,
+      groupId: activeGroupId,
       structure: { ...activeProject.structure, id: crypto.randomUUID() },
       projectCables: []
     };
@@ -204,6 +327,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     const newProjects: Project[] = circuits.map(c => ({
       id: crypto.randomUUID(),
       name: c.id,
+      groupId: activeGroupId,
       structure: {
         id: crypto.randomUUID(),
         name: `${c.id} — ${c.from} → ${c.to}`,
@@ -238,13 +362,14 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       ...projectToCopy,
       id: newId,
       name: `${projectToCopy.name} - Cópia`,
+      groupId: projectToCopy.groupId || activeGroupId,
       structure: { ...projectToCopy.structure, id: crypto.randomUUID() },
       projectCables: projectToCopy.projectCables.map(pc => ({
         ...pc,
         id: crypto.randomUUID()
       }))
     };
-    
+
     setProjects(prev => [...prev, duplicatedProject]);
     setActiveProjectId(newId);
   };
@@ -261,11 +386,13 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <ProjectContext.Provider value={{
+      projectGroups, activeGroupId, activeGroup, setActiveGroupId,
+      createProjectGroup, renameProjectGroup, deleteProjectGroup,
       projects, setProjects,
       activeProjectId, setActiveProjectId,
       activeProject, savedProjects,
       updateActiveProject, saveProject,
-      loadProject, deleteSavedProject,
+      loadProject, loadAllInGroup, deleteSavedProject,
       renameProject, addNewProject, addProjectsFromTopology,
       deleteProject, duplicateProject, setStructure,
       setProjectCables

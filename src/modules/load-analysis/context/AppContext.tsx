@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import type { LoadProject } from '../types';
 import { getModuleTheme, DEFAULT_THEME, type ModuleTheme } from '../config/moduleThemes';
+
+const LS_KEY = 'savedProjects';
 
 interface Toast {
   message: string;
@@ -29,10 +31,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [darkMode, setDarkModeState] = useState(false);
   const [toastData, setToastData] = useState<Toast | null>(null);
   const [currentProject, setCurrentProjectState] = useState<LoadProject | null>(null);
-  const [savedProjects, setSavedProjects] = useState<LoadProject[]>([]);
+  const [savedProjects, setSavedProjects] = useState<LoadProject[]>(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      return raw ? (JSON.parse(raw) as LoadProject[]) : [];
+    } catch { return []; }
+  });
   const [activeTab, setActiveTab] = useState<AppTab>('overview');
 
   const moduleTheme = useMemo(() => getModuleTheme('load-analysis'), []);
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(savedProjects)); } catch { /* quota */ }
+  }, [savedProjects]);
 
   const setDarkMode = useCallback((v: boolean) => {
     setDarkModeState(v);
