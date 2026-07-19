@@ -1,7 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, GitBranch, CheckCircle2, ChevronRight, Upload, Loader2, AlertCircle, FileImage, PenLine, Map, Save, Clock, Trash2 } from 'lucide-react';
 import { TopologyEditor } from './TopologyEditor';
+import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import type { TopologyGraph, TopologyProjectConfig, TopologyCircuit } from '../../types';
 import { parseUnifilare, fileToBase64 } from '../../utils/parseUnifilare';
 import { parsePlantaBaixa, gridToCanvas } from '../../utils/parsePlantaBaixa';
@@ -28,9 +31,13 @@ interface TopologyDraft {
   nodes: TopologyDraftNode[];
   edges: TopologyDraftEdge[];
   savedAt: string;
+  /** Progetto per cui è stata salvata originariamente (può differire dal progetto attivo al momento del recupero). */
+  savedGroupId?: string;
+  savedGroupName?: string;
 }
 
-const draftKey = (groupId: string) => `topology-draft:${groupId}`;
+const DRAFT_KEY_PREFIX = 'topology-draft:';
+const draftKey = (groupId: string) => `${DRAFT_KEY_PREFIX}${groupId}`;
 
 function loadDraft(groupId: string): TopologyDraft | null {
   try {
@@ -41,8 +48,34 @@ function loadDraft(groupId: string): TopologyDraft | null {
   }
 }
 
-function clearDraft(groupId: string) {
-  localStorage.removeItem(draftKey(groupId));
+/**
+ * Cerca una bozza salvata sotto QUALSIASI progetto. Necessario perché l'id del
+ * progetto attivo può cambiare al ricaricamento della pagina (es. dopo il fetch
+ * dei progetti da Supabase), lasciando la bozza "orfana" sotto il vecchio id.
+ */
+function findAnyDraft(): { key: string; draft: TopologyDraft } | null {
+  try {
+    let best: { key: string; draft: TopologyDraft } | null = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(DRAFT_KEY_PREFIX)) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const draft = JSON.parse(raw) as TopologyDraft;
+        if (!best || new Date(draft.savedAt).getTime() > new Date(best.draft.savedAt).getTime()) {
+          best = { key, draft };
+        }
+      } catch { /* skip corrupted entry */ }
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft(key: string) {
+  localStorage.removeItem(key);
 }
 
 function serializeNodes(nodes: Node[]): TopologyDraftNode[] {
@@ -97,6 +130,8 @@ function friendlyErrorMessage(e: any): string {
 }
 
 export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, groupName }: TopologyModalProps) {
+  const { showToast } = useApp();
+  const { user } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [graph, setGraph] = useState<TopologyGraph | null>(null);
   const [config, setConfig] = useState<TopologyProjectConfig>({
@@ -121,29 +156,145 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
   // Bozza — mirror in tempo reale del canvas (anche prima di confermare la topologia)
   const liveGraphRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
   const [pendingDraft, setPendingDraft] = useState<TopologyDraft | null>(null);
+  const [pendingDraftKey, setPendingDraftKey] = useState<string | null>(null);
+  const [pendingDraftDbId, setPendingDraftDbId] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
 
-  // Al primo apertura del modale, verifica se esiste una bozza per questo progetto
-  useEffect(() => {
-    if (isOpen) {
-      const draft = loadDraft(groupId);
-      setPendingDraft(draft);
-      setDraftSavedAt(null);
-    }
-  }, [isOpen, groupId]);
+  // Bozza salvata nel database — sopravvive alla cancellazione del localStorage e
+  // può essere ripresa da qualsiasi browser/dispositivo dello stesso utente.
+  const [dbDraftId, setDbDraftId] = useState<string | null>(null);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
+  const [draftNameInput, setDraftNameInput] = useState('');
+  const [savingToDb, setSavingToDb] = useState(false);
 
-  const handleSaveDraft = () => {
+  const buildDraftFields = useCallback(() => {
     const nodesToSave = step === 1 ? liveGraphRef.current.nodes : (graph?.nodes.map(n => ({ id: n.id, type: n.type, data: { label: n.label }, position: n.position })) ?? []);
     const edgesToSave = step === 1 ? liveGraphRef.current.edges : (graph?.edges.map(e => ({ id: e.id, source: e.source, target: e.target, type: 'labeled', data: { label: e.label } })) ?? []);
-    const draft: TopologyDraft = {
-      step, step1Mode, config, circuits,
+    return {
       nodes: serializeNodes(nodesToSave as Node[]),
       edges: serializeEdges(edgesToSave as Edge[]),
+    };
+  }, [step, graph]);
+
+  // Al primo apertura del modale, verifica se esiste una bozza salvata nel database
+  // (priorità, sopravvive a refresh e cambi di browser) o, in mancanza, nel
+  // localStorage di questo browser (fallback offline).
+  useEffect(() => {
+    if (!isOpen || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('TopologyDraft')
+          .select('*')
+          .eq('userId', user.id)
+          .order('savedAt', { ascending: false })
+          .limit(1);
+        if (!cancelled && !error && data && data.length > 0) {
+          const row = data[0];
+          const draft: TopologyDraft = {
+            step: row.step,
+            step1Mode: row.step1Mode,
+            config: JSON.parse(row.config),
+            circuits: JSON.parse(row.circuits),
+            nodes: JSON.parse(row.nodes),
+            edges: JSON.parse(row.edges),
+            savedAt: row.savedAt,
+            savedGroupId: row.groupId,
+            savedGroupName: row.name,
+          };
+          setPendingDraft(draft);
+          setPendingDraftDbId(row.id);
+          setPendingDraftKey(null);
+          return;
+        }
+      } catch (e) {
+        console.error('Errore nel recupero della bozza dal database:', e);
+      }
+      // Fallback: nessuna bozza nel database (offline o nessuna trovata) — controlla il localStorage.
+      if (cancelled) return;
+      let draft = loadDraft(groupId);
+      let key = draftKey(groupId);
+      if (!draft) {
+        const any = findAnyDraft();
+        if (any) { draft = any.draft; key = any.key; }
+      }
+      setPendingDraft(draft);
+      setPendingDraftKey(draft ? key : null);
+      setPendingDraftDbId(null);
+    })();
+    setDraftSavedAt(null);
+    return () => { cancelled = true; };
+  }, [isOpen, groupId, user]);
+
+  const handleSaveDraft = useCallback((opts?: { silent?: boolean }) => {
+    const { nodes: nodesToSave, edges: edgesToSave } = buildDraftFields();
+    // Niente da salvare — non scrivere una bozza vuota (es. modale appena aperto).
+    if (nodesToSave.length === 0 && circuits.length === 0) return;
+    const draft: TopologyDraft = {
+      step, step1Mode, config, circuits,
+      nodes: nodesToSave,
+      edges: edgesToSave,
       savedAt: new Date().toLocaleString(),
+      savedGroupId: groupId,
+      savedGroupName: groupName,
     };
     localStorage.setItem(draftKey(groupId), JSON.stringify(draft));
     setDraftSavedAt(draft.savedAt);
-  };
+    if (!opts?.silent) showToast(`Bozza salvata alle ${draft.savedAt}`, 'success');
+  }, [step, step1Mode, config, circuits, buildDraftFields, groupId, groupName, showToast]);
+
+  // Apre il prompt per dare un nome alla bozza prima di salvarla nel database.
+  const handleOpenSavePrompt = useCallback(() => {
+    setDraftNameInput(groupName || 'Nuovo progetto');
+    setShowNamePrompt(true);
+  }, [groupName]);
+
+  const handleConfirmSaveToDb = useCallback(async () => {
+    const name = draftNameInput.trim();
+    if (!name || !user) return;
+    setSavingToDb(true);
+    try {
+      const { nodes: nodesToSave, edges: edgesToSave } = buildDraftFields();
+      const savedAt = new Date().toLocaleString();
+      const payload: Record<string, any> = {
+        userId: user.id,
+        groupId,
+        name,
+        step, step1Mode,
+        config: JSON.stringify(config),
+        circuits: JSON.stringify(circuits),
+        nodes: JSON.stringify(nodesToSave),
+        edges: JSON.stringify(edgesToSave),
+        savedAt,
+      };
+      if (dbDraftId) payload.id = dbDraftId;
+      const { data, error } = await supabase.from('TopologyDraft').upsert(payload).select().single();
+      if (error) throw error;
+      setDbDraftId(data.id);
+      // Mantieni anche una copia locale come backup offline.
+      localStorage.setItem(draftKey(groupId), JSON.stringify({
+        step, step1Mode, config, circuits,
+        nodes: nodesToSave, edges: edgesToSave,
+        savedAt, savedGroupId: groupId, savedGroupName: name,
+      }));
+      setDraftSavedAt(savedAt);
+      showToast(`Bozza "${name}" salvata nel database`, 'success');
+      setShowNamePrompt(false);
+    } catch (e: any) {
+      showToast(`Errore nel salvataggio della bozza nel database: ${e.message || e}`, 'error');
+    } finally {
+      setSavingToDb(false);
+    }
+  }, [draftNameInput, user, buildDraftFields, groupId, step, step1Mode, config, circuits, dbDraftId, showToast]);
+
+  // Autosave — salva automaticamente ogni 15s mentre il modale è aperto, così il
+  // lavoro non si perde se l'utente si dimentica di premere "Salva bozza".
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => handleSaveDraft({ silent: true }), 15000);
+    return () => clearInterval(interval);
+  }, [isOpen, handleSaveDraft]);
 
   const handleResumeDraft = () => {
     if (!pendingDraft) return;
@@ -159,12 +310,30 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
         edges: pendingDraft.edges.map(e => ({ id: e.id, source: e.source, target: e.target, label: e.label })),
       });
     }
+    // La bozza recuperata potrebbe appartenere a un altro id di progetto (es. dopo un
+    // refresh): una volta ripresa, rimuovi quella vecchia chiave per evitare doppioni.
+    if (pendingDraftKey) clearDraft(pendingDraftKey);
+    // Se la bozza veniva dal database, continua ad aggiornare la stessa riga
+    // (invece di crearne una nuova) ai prossimi salvataggi.
+    if (pendingDraftDbId) {
+      setDbDraftId(pendingDraftDbId);
+      setDraftNameInput(pendingDraft.savedGroupName || groupName);
+    }
     setPendingDraft(null);
+    setPendingDraftKey(null);
+    setPendingDraftDbId(null);
   };
 
   const handleDiscardDraft = () => {
-    clearDraft(groupId);
+    if (pendingDraftKey) clearDraft(pendingDraftKey);
+    if (pendingDraftDbId) {
+      supabase.from('TopologyDraft').delete().eq('id', pendingDraftDbId).then(({ error }) => {
+        if (error) console.error('Errore nell\'eliminazione della bozza dal database:', error);
+      });
+    }
     setPendingDraft(null);
+    setPendingDraftKey(null);
+    setPendingDraftDbId(null);
   };
 
   // Step 4 — unifilar upload
@@ -211,7 +380,8 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
     // Build circuit list from edges
     const nodeById = Object.fromEntries(g.nodes.map(n => [n.id, n]));
     const derived: TopologyCircuit[] = g.edges.map(e => ({
-      id: e.label,
+      id: e.id,
+      tag: e.label,
       from: nodeById[e.source]?.label || e.source,
       to: nodeById[e.target]?.label || e.target,
       cables: [],
@@ -224,7 +394,14 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
 
   const handleConfirm = () => {
     onConfirm(circuits, config);
-    clearDraft(groupId);
+    clearDraft(draftKey(groupId));
+    if (pendingDraftKey) clearDraft(pendingDraftKey);
+    const dbIdToDelete = dbDraftId || pendingDraftDbId;
+    if (dbIdToDelete) {
+      supabase.from('TopologyDraft').delete().eq('id', dbIdToDelete).then(({ error }) => {
+        if (error) console.error('Errore nell\'eliminazione della bozza dal database:', error);
+      });
+    }
     // Reset state for next open
     setStep(1);
     setStep1Mode('choose');
@@ -233,6 +410,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
     setPlantaFile(null);
     setUnifilarFile(null);
     setUnifilarDone(false);
+    setDbDraftId(null);
     onClose();
   };
 
@@ -243,10 +421,13 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
     try {
       const base64 = await fileToBase64(unifilarFile);
       const mime = unifilarFile.type as 'image/jpeg' | 'image/png' | 'image/webp';
-      const result = await parseUnifilare(base64, mime, circuits.map(c => c.id));
-      // Merge cable specs into circuits
+      const uniqueTags = [...new Set(circuits.map(c => c.tag))];
+      const result = await parseUnifilare(base64, mime, uniqueTags);
+      // Merge cable specs into circuits — più circuiti possono condividere lo stesso
+      // tag (stesso trecho fisico servito da più quadri): a tutti va applicata la
+      // stessa specifica cavo.
       setCircuits(prev => prev.map(c => {
-        const found = result.circuits.find(r => r.id === c.id);
+        const found = result.circuits.find(r => r.id === c.tag);
         return found ? { ...c, cables: found.cables } : c;
       }));
       setUnifilarDone(true);
@@ -306,12 +487,15 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
             </div>
 
             <button
-              onClick={handleSaveDraft}
+              onClick={handleOpenSavePrompt}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
-              title="Salva lo stato attuale come bozza per riprenderlo più tardi"
+              title={draftSavedAt ? `Ultimo salvataggio: ${draftSavedAt}. Clicca per salvare di nuovo nel database.` : 'Salva lo stato attuale nel database per riprenderlo più tardi, anche da un altro dispositivo'}
             >
               <Save size={12} />
-              {draftSavedAt ? 'Bozza salvata' : 'Salva bozza'}
+              <span className="flex flex-col items-start leading-tight">
+                <span>Salva bozza</span>
+                {draftSavedAt && <span className="normal-case font-medium opacity-50 tracking-normal">Salvata alle {draftSavedAt}</span>}
+              </span>
             </button>
 
             <button onClick={() => { setStep(1); setStep1Mode('choose'); setImportedNodes(undefined); setImportedEdges(undefined); setPlantaFile(null); setUnifilarFile(null); setUnifilarDone(false); onClose(); }} className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors dark:text-white">
@@ -324,7 +508,10 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
             <div className="flex items-center gap-3 px-6 py-3 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 shrink-0">
               <Clock size={14} className="text-amber-600 dark:text-amber-400 shrink-0" />
               <p className="text-[10px] font-medium text-amber-700 dark:text-amber-400 flex-1">
-                Trovata una bozza di "{groupName}" salvata il {pendingDraft.savedAt} (passo {pendingDraft.step} — {STEP_LABELS[pendingDraft.step]}).
+                Trovata una bozza {pendingDraftDbId ? 'nel database' : 'locale'} di "{pendingDraft.savedGroupName || groupName}" salvata il {pendingDraft.savedAt} (passo {pendingDraft.step} — {STEP_LABELS[pendingDraft.step]}).
+                {!pendingDraftDbId && pendingDraft.savedGroupId && pendingDraft.savedGroupId !== groupId && (
+                  <> Verrà associata al progetto attualmente attivo ("{groupName}") se la riprendi.</>
+                )}
               </p>
               <button
                 onClick={handleResumeDraft}
@@ -619,7 +806,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
                     <div className="space-y-2">
                       {circuits.map(c => (
                         <div key={c.id} className="flex items-center gap-4 p-3 border border-black/10 dark:border-white/10 rounded-lg dark:text-white">
-                          <span className="text-[11px] font-black w-10 shrink-0" style={{ color: '#81292C' }}>{c.id}</span>
+                          <span className="text-[11px] font-black w-10 shrink-0" style={{ color: '#81292C' }}>{c.tag}</span>
                           <span className="text-[10px] opacity-60">{c.from}</span>
                           <span className="text-[9px] opacity-30 mx-1">→</span>
                           <span className="text-[10px] opacity-60">{c.to}</span>
@@ -722,7 +909,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
                       <div className="mt-2 space-y-1">
                         {circuits.map(c => (
                           <div key={c.id} className="text-[9px] dark:text-white/60">
-                            <span className="font-black" style={{ color: '#81292C' }}>{c.id}</span>
+                            <span className="font-black" style={{ color: '#81292C' }}>{c.tag}</span>
                             {c.cables && c.cables.length > 0
                               ? c.cables.map((cb, i) => <span key={i} className="ml-2 opacity-60">{cb.quantity}× {cb.name} {cb.section}mm² ({cb.conductors}C)</span>)
                               : <span className="ml-2 opacity-30 italic">nessun cavo identificato</span>
@@ -762,6 +949,59 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Prompt: nome del progetto per salvare la bozza nel database */}
+      {showNamePrompt && (
+        <motion.div
+          key="save-draft-prompt"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => !savingToDb && setShowNamePrompt(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="w-full max-w-sm bg-white dark:bg-[#141414] rounded-2xl shadow-2xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-sm font-bold dark:text-white">Salva bozza nel database</h3>
+              <p className="text-[10px] opacity-50 dark:text-white/50 mt-1">
+                Dai un nome al progetto: potrai riprenderlo in seguito, anche riaprendo il sito da un altro dispositivo.
+              </p>
+            </div>
+            <input
+              autoFocus
+              type="text"
+              value={draftNameInput}
+              onChange={(e) => setDraftNameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && draftNameInput.trim()) handleConfirmSaveToDb(); }}
+              placeholder="Es: RELAIS LA SUVERA"
+              className="w-full px-3 py-2 text-[12px] font-medium bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg outline-none focus:border-[#81292C] dark:text-white"
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNamePrompt(false)}
+                disabled={savingToDb}
+                className="flex-1 py-2.5 text-[11px] font-bold border border-black/20 dark:border-white/20 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white disabled:opacity-40"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleConfirmSaveToDb}
+                disabled={!draftNameInput.trim() || savingToDb}
+                className="flex-1 py-2.5 text-[11px] font-bold text-white rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ backgroundColor: '#81292C' }}
+              >
+                {savingToDb ? <><Loader2 size={14} className="animate-spin" /> Salvataggio...</> : <><Save size={14} /> Salva</>}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>
   );
 }

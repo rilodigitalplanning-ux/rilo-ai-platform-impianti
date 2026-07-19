@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun } from 'lucide-react';
+import { Logo } from '../components/Logo';
 
 const MODULES = [
   {
@@ -100,8 +101,9 @@ export function ModuleSelector() {
           <p className={`text-[10px] font-bold uppercase tracking-[0.3em] opacity-40 ${dark ? 'text-white' : 'text-black'}`}>
             Seleziona modulo
           </p>
-          <h1 className={`text-4xl font-black italic tracking-tighter uppercase ${dark ? 'text-white' : 'text-black'}`}>
-            Rilo AI Platform
+          <h1 className={`flex items-center justify-center gap-3 text-4xl font-black italic tracking-tighter uppercase ${dark ? 'text-white' : 'text-black'}`}>
+            <Logo className="h-9 w-auto" riColor={dark ? '#ffffff' : '#000000'} />
+            AI Platform
           </h1>
           <p className={`text-sm font-medium opacity-40 max-w-md mx-auto ${dark ? 'text-white' : 'text-black'}`}>
             Strumenti di ingegneria elettrica potenziati dall'intelligenza artificiale

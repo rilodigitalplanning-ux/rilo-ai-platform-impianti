@@ -86,7 +86,8 @@ export interface TopologyGraph {
 
 /** One cable run extracted from the topology — becomes a Structure in the project */
 export interface TopologyCircuit {
-  id: string;          // e.g. "C1"
+  id: string;           // unique internal id (React Flow edge id) — never collides
+  tag: string;           // user-visible trecho name, e.g. "C1" — multiple circuits may share the same tag
   from: string;        // label of source node
   to: string;          // label of target node
   /** Populated after AI parsing of unifilar or manual entry */

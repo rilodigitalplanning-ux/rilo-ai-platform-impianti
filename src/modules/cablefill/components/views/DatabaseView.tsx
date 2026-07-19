@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Database, Plus, Folder, FolderOpen, Trash2, ChevronLeft, ChevronRight, Layers, CircleDot, PlayCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Database, Plus, Folder, FolderOpen, Trash2, ChevronLeft, ChevronRight, Layers, CircleDot, PlayCircle, LayoutGrid, List } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { useApp } from '../../context/AppContext';
 import { TRANSLATIONS } from '../../constants';
@@ -19,6 +19,12 @@ export const DatabaseView = () => {
   } = useProject();
 
   const [openGroupId, setOpenGroupId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try { return (localStorage.getItem('db-view-mode') as 'grid' | 'list') || 'list'; } catch { return 'list'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('db-view-mode', viewMode); } catch { /* quota */ }
+  }, [viewMode]);
 
   const handleLoadProject = (p: any) => {
     loadProject(p);
@@ -56,13 +62,31 @@ export const DatabaseView = () => {
             </div>
           </div>
           {!openGroup && (
-            <button
-              onClick={() => addNewProject(t)}
-              className="px-6 py-2 bg-[#401318] dark:bg-white dark:text-black text-white text-[10px] font-bold rounded hover:opacity-90 transition-all flex items-center gap-2"
-            >
-              <Plus size={14} />
-              {t.preview.newProject}
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-black/5 dark:bg-white/5 rounded-lg p-0.5">
+                <button
+                  onClick={() => setViewMode('list')}
+                  title="Vista a lista"
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white dark:bg-[#141414] shadow-sm text-[#81292C]' : 'opacity-40 hover:opacity-70 dark:text-white'}`}
+                >
+                  <List size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  title="Vista a card"
+                  className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-[#141414] shadow-sm text-[#81292C]' : 'opacity-40 hover:opacity-70 dark:text-white'}`}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+              </div>
+              <button
+                onClick={() => addNewProject(t)}
+                className="px-6 py-2 bg-[#401318] dark:bg-white dark:text-black text-white text-[10px] font-bold rounded hover:opacity-90 transition-all flex items-center gap-2"
+              >
+                <Plus size={14} />
+                {t.preview.newProject}
+              </button>
+            </div>
           )}
         </div>
 
@@ -74,7 +98,9 @@ export const DatabaseView = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"
+              className={viewMode === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'
+                : 'bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-xl divide-y divide-black/5 dark:divide-white/5 overflow-hidden'}
             >
               {projectGroups.map(g => {
                 const count = structuresByGroup(g.id).length;
@@ -82,10 +108,12 @@ export const DatabaseView = () => {
                   <button
                     key={g.id}
                     onClick={() => setOpenGroupId(g.id)}
-                    className="flex items-center gap-3 bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-[#81292C]/40 transition-all text-left group"
+                    className={viewMode === 'grid'
+                      ? 'flex items-center gap-3 bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-[#81292C]/40 transition-all text-left group w-full'
+                      : 'flex items-center gap-3 px-5 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left group w-full'}
                   >
-                    <div className="w-10 h-10 bg-[#81292C]/10 rounded-lg flex items-center justify-center shrink-0">
-                      <Folder size={18} className="text-[#81292C]" />
+                    <div className={viewMode === 'grid' ? 'w-10 h-10 bg-[#81292C]/10 rounded-lg flex items-center justify-center shrink-0' : 'shrink-0'}>
+                      <Folder size={viewMode === 'grid' ? 18 : 14} className={viewMode === 'grid' ? 'text-[#81292C]' : 'opacity-30'} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-[11px] font-bold dark:text-white uppercase tracking-tight truncate">{g.name}</h3>
@@ -101,10 +129,12 @@ export const DatabaseView = () => {
               {orphanStructures.length > 0 && (
                 <button
                   onClick={() => setOpenGroupId('__orphans__')}
-                  className="flex items-center gap-3 bg-white dark:bg-[#141414] border border-dashed border-black/10 dark:border-white/10 p-4 rounded-xl hover:border-[#81292C]/40 transition-all text-left group"
+                  className={viewMode === 'grid'
+                    ? 'flex items-center gap-3 bg-white dark:bg-[#141414] border border-dashed border-black/10 dark:border-white/10 p-4 rounded-xl hover:border-[#81292C]/40 transition-all text-left group w-full'
+                    : 'flex items-center gap-3 px-5 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors text-left group w-full'}
                 >
-                  <div className="w-10 h-10 bg-black/5 dark:bg-white/5 rounded-lg flex items-center justify-center shrink-0">
-                    <Folder size={18} className="opacity-40" />
+                  <div className={viewMode === 'grid' ? 'w-10 h-10 bg-black/5 dark:bg-white/5 rounded-lg flex items-center justify-center shrink-0' : 'shrink-0'}>
+                    <Folder size={viewMode === 'grid' ? 18 : 14} className="opacity-40" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-[11px] font-bold opacity-60 dark:text-white uppercase tracking-tight">Senza progetto</h3>

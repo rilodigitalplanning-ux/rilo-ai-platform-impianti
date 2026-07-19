@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
 import type { LoadProject } from '../types';
 import { getModuleTheme, DEFAULT_THEME, type ModuleTheme } from '../config/moduleThemes';
+import { getSystemPrefersDark, subscribeToSystemTheme } from '@/utils/systemTheme';
 
 const LS_KEY = 'savedProjects';
 
@@ -28,7 +29,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [darkMode, setDarkModeState] = useState(false);
+  const [darkMode, setDarkModeState] = useState(getSystemPrefersDark);
   const [toastData, setToastData] = useState<Toast | null>(null);
   const [currentProject, setCurrentProjectState] = useState<LoadProject | null>(null);
   const [savedProjects, setSavedProjects] = useState<LoadProject[]>(() => {
@@ -49,6 +50,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDarkModeState(v);
     document.documentElement.classList.toggle('dark', v);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, []);
+
+  useEffect(() => subscribeToSystemTheme(setDarkMode), [setDarkMode]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToastData({ message, type });

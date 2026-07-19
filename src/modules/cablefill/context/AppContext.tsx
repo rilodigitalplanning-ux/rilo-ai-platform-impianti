@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { ModuleTheme, getModuleTheme } from '../config/moduleThemes';
+import { getSystemPrefersDark, subscribeToSystemTheme } from '@/utils/systemTheme';
 
 interface AppContextType {
   darkMode: boolean;
@@ -22,7 +23,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(getSystemPrefersDark);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'trays' | 'conduits' | 'cables' | 'database' | 'users'>('dashboard');
   const [activeModule, setActiveModule] = useState<'cablefill'>('cablefill');
   const [activeTheme, setActiveTheme] = useState<string | null>(null);
@@ -44,6 +45,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  useEffect(() => subscribeToSystemTheme(setDarkMode), []);
 
   return (
     <AppContext.Provider value={{

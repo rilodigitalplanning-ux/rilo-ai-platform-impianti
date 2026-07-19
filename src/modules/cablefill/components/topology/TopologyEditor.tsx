@@ -107,7 +107,7 @@ function LabeledEdge({
               className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest rounded border transition-all ${dragging ? 'cursor-grabbing' : 'cursor-grab'} ${
                 label
                   ? 'bg-[#81292C] text-white border-[#81292C]'
-                  : 'bg-white dark:bg-[#1a1a1a] text-black/30 dark:text-white/30 border-black/20 dark:border-white/20 border-dashed'
+                  : 'bg-amber-400 text-black border-amber-500 animate-pulse shadow-lg'
               }`}
             >
               {label || 'C?'}
@@ -147,6 +147,7 @@ export function TopologyEditor({ onConfirm, darkMode, defaultNodes, defaultEdges
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes ?? DEFAULT_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(defaultEdges ?? []);
   const [error, setError] = useState<string | null>(null);
+  const rfInstance = useRef<ReturnType<typeof useReactFlow> | null>(null);
 
   useEffect(() => {
     onGraphChange?.(nodes, edges);
@@ -265,7 +266,11 @@ export function TopologyEditor({ onConfirm, darkMode, defaultNodes, defaultEdges
     // Validate: all edges need a label
     const unlabeled = edges.filter(e => !(e.data?.label as string)?.trim());
     if (unlabeled.length > 0) {
-      setError('Tutti i tratti devono avere un nome (es: C1, C2...). Doppio clic sul label per modificare.');
+      setError(`Ci sono ${unlabeled.length} tratt${unlabeled.length === 1 ? 'o' : 'i'} senza nome — evidenziat${unlabeled.length === 1 ? 'o' : 'i'} in giallo lampeggiante sul canvas. Doppio clic sul label per assegnare un nome (es: C1, C2...).`);
+      const unlabeledIds = new Set(unlabeled.map(e => e.id));
+      setEdges(es => es.map(e => ({ ...e, selected: unlabeledIds.has(e.id) })));
+      const affectedNodeIds = new Set(unlabeled.flatMap(e => [e.source, e.target]));
+      rfInstance.current?.fitView({ nodes: [...affectedNodeIds].map(id => ({ id })), padding: 0.3, duration: 400 });
       return;
     }
     // Validate: at least one edge
@@ -273,18 +278,9 @@ export function TopologyEditor({ onConfirm, darkMode, defaultNodes, defaultEdges
       setError('Disegna almeno un tratto che collega i nodi.');
       return;
     }
-    // Validate: labels must be unique — ogni tratto diventerà una struttura/circuito
-    // indipendente a valle; due tratti con lo stesso nome si sovrascriverebbero a vicenda.
-    const labelCounts = new Map<string, number>();
-    edges.forEach(e => {
-      const label = (e.data?.label as string).trim();
-      labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
-    });
-    const duplicates = [...labelCounts.entries()].filter(([, count]) => count > 1).map(([label]) => label);
-    if (duplicates.length > 0) {
-      setError(`Ogni tratto deve avere un nome univoco. Nome duplicato: ${duplicates.join(', ')}. Rinomina uno dei tratti (doppio clic sul label).`);
-      return;
-    }
+    // Nota: più tratti possono condividere lo stesso nome (es. più quadri derivati
+    // dallo stesso trecho fisico C6). L'identità univoca di ogni tratto è garantita
+    // internamente dall'id del bordo (e.id), non dal nome/etichetta visibile.
     // Build graph output
     const graph: TopologyGraph = {
       nodes: nodes.map(n => ({
@@ -382,6 +378,7 @@ export function TopologyEditor({ onConfirm, darkMode, defaultNodes, defaultEdges
           fitView
           deleteKeyCode="Delete"
           proOptions={{ hideAttribution: true }}
+          onInit={(instance) => { rfInstance.current = instance; }}
         >
           <Background gap={20} size={1} color={darkMode ? '#333' : '#ddd'} />
           <Controls />

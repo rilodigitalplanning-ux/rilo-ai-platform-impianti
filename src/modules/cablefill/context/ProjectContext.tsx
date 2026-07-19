@@ -326,11 +326,11 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
     const newProjects: Project[] = circuits.map(c => ({
       id: crypto.randomUUID(),
-      name: c.id,
+      name: c.tag,
       groupId: activeGroupId,
       structure: {
         id: crypto.randomUUID(),
-        name: `${c.id} — ${c.from} → ${c.to}`,
+        name: `${c.tag} — ${c.from} → ${c.to}`,
         type: config.structureType,
         width: defaultDim.width,
         height: defaultDim.height,

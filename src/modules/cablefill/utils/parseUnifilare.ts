@@ -10,7 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { TopologyCircuit, TopologyCableSpec } from '../types';
+import type { TopologyCableSpec } from '../types';
 
 const SYSTEM_PROMPT = `Sei un esperto di impianti elettrici. Ti verrà fornito uno schema unifilare.
 Il tuo compito è estrarre le informazioni di ogni circuito e restituirle in formato JSON.
@@ -45,7 +45,8 @@ Rispondi SOLO con un oggetto JSON valido nel formato:
 }`;
 
 export interface ParseUnifilareResult {
-  circuits: Pick<TopologyCircuit, 'id' | 'cables'>[];
+  // "id" qui è il tag/nome del tratto letto dallo schema (es. "C1"), non l'id interno di TopologyCircuit
+  circuits: { id: string; cables?: TopologyCableSpec[] }[];
 }
 
 function buildMockUnifilare(circuitIds: string[]): ParseUnifilareResult {
