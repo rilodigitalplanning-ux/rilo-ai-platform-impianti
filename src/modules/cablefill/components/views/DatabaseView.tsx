@@ -90,7 +90,7 @@ export const DatabaseView = () => {
           )}
         </div>
 
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {!openGroup ? (
             /* ── Livello 1: card compatte per progetto ────────────────────── */
             <motion.div

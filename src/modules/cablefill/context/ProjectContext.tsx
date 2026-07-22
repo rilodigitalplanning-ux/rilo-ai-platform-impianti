@@ -34,6 +34,12 @@ interface ProjectContextType {
   duplicateProject: (id: string) => void;
   setStructure: (update: Structure | ((s: Structure) => Structure)) => void;
   setProjectCables: (update: ProjectCable[] | ((pc: ProjectCable[]) => ProjectCable[])) => void;
+
+  // Cronologia modifiche (struttura + cavi della struttura attiva) — fino a 10 passi
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -374,15 +380,70 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     setActiveProjectId(newId);
   };
 
+  // ── Cronologia (undo/redo) — struttura + cavi della struttura attiva, max 10 passi ──
+  const MAX_HISTORY = 10;
+  type HistorySnapshot = { structure: Structure; projectCables: ProjectCable[] };
+  const [history, setHistory] = useState<HistorySnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
+
+  // Cambiando struttura attiva, la cronologia della struttura precedente non ha più senso qui
+  useEffect(() => {
+    setHistory([]);
+    setRedoStack([]);
+  }, [activeProjectId]);
+
+  const pushHistory = () => {
+    if (!activeProject) return;
+    setHistory(prev => [...prev.slice(-(MAX_HISTORY - 1)), { structure: activeProject.structure, projectCables: activeProject.projectCables }]);
+    setRedoStack([]);
+  };
+
   const setStructure = (update: Structure | ((s: Structure) => Structure)) => {
     const newStructure = typeof update === 'function' ? update(activeProject?.structure as Structure) : update;
+    pushHistory();
     updateActiveProject({ structure: newStructure });
   };
 
   const setProjectCables = (update: ProjectCable[] | ((pc: ProjectCable[]) => ProjectCable[])) => {
     const newCables = typeof update === 'function' ? update(activeProject?.projectCables || []) : update;
+    pushHistory();
     updateActiveProject({ projectCables: newCables });
   };
+
+  const undo = () => {
+    if (!activeProject || history.length === 0) return;
+    const last = history[history.length - 1];
+    setRedoStack(prev => [...prev.slice(-(MAX_HISTORY - 1)), { structure: activeProject.structure, projectCables: activeProject.projectCables }]);
+    setHistory(prev => prev.slice(0, -1));
+    updateActiveProject({ structure: last.structure, projectCables: last.projectCables });
+  };
+
+  const redo = () => {
+    if (!activeProject || redoStack.length === 0) return;
+    const last = redoStack[redoStack.length - 1];
+    setHistory(prev => [...prev.slice(-(MAX_HISTORY - 1)), { structure: activeProject.structure, projectCables: activeProject.projectCables }]);
+    setRedoStack(prev => prev.slice(0, -1));
+    updateActiveProject({ structure: last.structure, projectCables: last.projectCables });
+  };
+
+  // Ctrl+Z / Ctrl+Shift+Z (o Ctrl+Y) — ignorati mentre si scrive in un campo di testo,
+  // per non rompere l'undo nativo del browser dentro gli input.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' && e.key.toLowerCase() !== 'y') return;
+      const target = e.target as HTMLElement;
+      const isEditable = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (isEditable) return;
+      e.preventDefault();
+      if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) {
+        redo();
+      } else {
+        undo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [history, redoStack, activeProject]);
 
   return (
     <ProjectContext.Provider value={{
@@ -395,7 +456,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       loadProject, loadAllInGroup, deleteSavedProject,
       renameProject, addNewProject, addProjectsFromTopology,
       deleteProject, duplicateProject, setStructure,
-      setProjectCables
+      setProjectCables,
+      undo, redo, canUndo: history.length > 0, canRedo: redoStack.length > 0
     }}>
       {children}
     </ProjectContext.Provider>

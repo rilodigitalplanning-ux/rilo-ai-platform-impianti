@@ -115,6 +115,7 @@ export function ReportModal({
                     zoom={1}
                     t={t}
                     showLimitLine={false}
+                    forceTypeColor
                   />
                 ))}
               </div>
@@ -144,7 +145,7 @@ export function ReportModal({
                       <tr key={i} className="border-b border-black/5 hover:bg-black/5 transition-colors">
                         <td className="py-3 px-4 font-bold text-[#81292C] uppercase">{cable.name}</td>
                         <td className="py-3 px-4 text-black">{cable.size || `${cable.diameter}mm`}</td>
-                        <td className="py-3 px-4 text-black italic opacity-60">{pc.tag || '-'}</td>
+                        <td className="py-3 px-4 text-black italic opacity-60 uppercase">{pc.tag || '-'}</td>
                         <td className="py-3 px-4 text-right font-black text-[#81292C]">{pc.quantity}</td>
                       </tr>
                     );

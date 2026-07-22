@@ -2,14 +2,28 @@ import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Structure, ProjectCable, Cable, Translation } from '../types';
 
-export function CableCircle({ c, scale, onCableClick }: { c: any, scale: number, onCableClick?: (index: number) => void, key?: React.Key }) {
+// Palette fissa per tipo di cavo — usata quando forceTypeColor è attivo (report/export)
+// così lo stesso tipo di cavo ha sempre lo stesso colore, indipendentemente da eventuali
+// colori personalizzati assegnati manualmente sull'istanza (pc.color).
+export const CABLE_TYPE_COLORS_HEX: Record<Cable['type'], string> = {
+  power: '#E63946',
+  data: '#00B4D8',
+  evac: '#FFBE0B',
+  irai: '#8338EC',
+};
+
+export function getCableTypeColorHex(type: Cable['type'] | undefined): string {
+  return CABLE_TYPE_COLORS_HEX[type as Cable['type']] || CABLE_TYPE_COLORS_HEX.power;
+}
+
+export function CableCircle({ c, scale, onCableClick, forceTypeColor }: { c: any, scale: number, onCableClick?: (index: number) => void, forceTypeColor?: boolean, key?: React.Key }) {
   return (
-    <div 
+    <div
       className="absolute rounded-full border border-black/20 dark:border-white/20 shadow-sm flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-black/50 dark:hover:ring-white/50 transition-all"
-      style={{ 
-        width: c.diameter * scale, 
+      style={{
+        width: c.diameter * scale,
         height: c.diameter * scale,
-        backgroundColor: c.color || (c.type === 'power' ? '#81292C' : '#00B4D8'),
+        backgroundColor: forceTypeColor ? getCableTypeColorHex(c.type) : (c.color || getCableTypeColorHex(c.type)),
         transform: 'translate(-50%, -50%)',
         zIndex: 10
       }}
@@ -46,10 +60,12 @@ export interface StructurePreviewProps {
   darkMode: boolean;
   zoom?: number;
   showLimitLine?: boolean;
+  /** Ignora i colori personalizzati per istanza e usa sempre il colore fisso per tipo di cavo (report/export). */
+  forceTypeColor?: boolean;
   key?: React.Key;
 }
 
-export function StructurePreview({ structure, cables, allCables, packedCables, fillPercentage, limit, index, allowedArea, onCableClick, onNameChange, t, darkMode, zoom = 1, showLimitLine = true }: StructurePreviewProps) {
+export function StructurePreview({ structure, cables, allCables, packedCables, fillPercentage, limit, index, allowedArea, onCableClick, onNameChange, t, darkMode, zoom = 1, showLimitLine = true, forceTypeColor = false }: StructurePreviewProps) {
   if (!structure) return null;
   const baseScale = Math.min(400 / (structure.width || 1), 300 / (structure.height || 1));
   const scale = baseScale * zoom;
@@ -171,7 +187,7 @@ export function StructurePreview({ structure, cables, allCables, packedCables, f
           <div className="absolute inset-0">
             {cablesInThisStructure.map((c, i) => (
               <div key={i} className="absolute" style={{ left: c.x, top: c.y }}>
-                <CableCircle c={c} scale={scale} onCableClick={onCableClick} />
+                <CableCircle c={c} scale={scale} onCableClick={onCableClick} forceTypeColor={forceTypeColor} />
               </div>
             ))}
           </div>

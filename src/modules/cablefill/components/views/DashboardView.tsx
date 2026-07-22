@@ -240,204 +240,281 @@ export const DashboardView = () => {
 
   const packedStructures = useMemo(() => {
     if (!structure) return [];
-    const allUnits: { diameter: number, color: string, name: string, type: string, originalIndex: number }[] = [];
+
+    type Unit = { diameter: number, color: string, name: string, type: string, originalIndex: number };
+    type Group = { units: Unit[] };
+
+    // Raggruppa i cavi per tag: tutti i cavi con lo stesso tag formano un unico
+    // circuito che deve rimanere sempre nella stessa struttura (condotto/passerella) —
+    // non è ammesso spezzare un circuito su più pagine/strutture per riempimento.
+    // I cavi senza tag non hanno questo vincolo e vengono trattati singolarmente.
+    const groupsByTag = new Map<string, Group>();
+    const groups: Group[] = [];
     projectCables.forEach((pc, idx) => {
       if (!pc) return;
       const cable = pc.cable;
-      if (cable) {
-        for (let i = 0; i < pc.quantity; i++) {
-          allUnits.push({
-            diameter: cable.diameter,
-            color: pc.color || (cable.type === 'power' ? '#E63946' : '#00B4D8'),
-            name: cable.name,
-            type: cable.type,
-            originalIndex: idx
-          });
+      if (!cable) return;
+      const units: Unit[] = [];
+      for (let i = 0; i < pc.quantity; i++) {
+        units.push({
+          diameter: cable.diameter,
+          color: pc.color || (cable.type === 'power' ? '#E63946' : '#00B4D8'),
+          name: cable.name,
+          type: cable.type,
+          originalIndex: idx
+        });
+      }
+      const tag = pc.tag?.trim();
+      if (tag) {
+        const existing = groupsByTag.get(tag);
+        if (existing) {
+          existing.units.push(...units);
+        } else {
+          const group = { units };
+          groupsByTag.set(tag, group);
+          groups.push(group);
         }
+      } else {
+        groups.push({ units });
       }
     });
 
     const structures: { cables: any[], currentArea: number }[] = [{ cables: [], currentArea: 0 }];
-    const totalStructureArea = structure.type === 'conduit' 
+    const totalStructureArea = structure.type === 'conduit'
       ? Math.PI * Math.pow(structure.width / 2, 2)
       : structure.width * structure.height;
-    
+
     const allowedAreaPerStructure = totalStructureArea * (structure.fillLimit / 100);
-    
+    const unitArea = (u: Unit) => Math.PI * Math.pow(u.diameter / 2, 2);
+    const groupArea = (g: Group) => g.units.reduce((sum, u) => sum + unitArea(u), 0);
+
     if (structure.type === 'conduit') {
       const R = structure.width / 2;
-      
-      allUnits.forEach(unit => {
+
+      const placeUnitInConduit = (currentStructure: { cables: any[], currentArea: number }, unit: Unit): boolean => {
         const r = unit.diameter / 2;
-        const unitArea = Math.PI * Math.pow(r, 2);
-        let placed = false;
-        
-        for (let sIdx = 0; sIdx < structures.length; sIdx++) {
-          const currentStructure = structures[sIdx];
-          
-          if (currentStructure.currentArea + unitArea > allowedAreaPerStructure + 0.01) {
-            continue;
-          }
+        const placedInThis = currentStructure.cables;
+        let bestX = 0, bestY = 0, found = false;
 
-          const placedInThis = currentStructure.cables;
-          
-          if (structure.type === 'conduit' && placedInThis.length > 0) {
-            const hasPower = placedInThis.some(c => c.type === 'power');
-            const isUnitPower = unit.type === 'power';
-            if (hasPower !== isUnitPower) {
-              continue;
-            }
+        if (placedInThis.length === 0) {
+          if (r <= R - 0.1) {
+            bestX = 0;
+            // When cable is large relative to conduit, placing at exact center
+            // prevents a second cable from fitting. Offset to allow packing.
+            bestY = (3 * r > R - 0.5) ? Math.max(0, Math.min(r, R - r - 0.5)) : 0;
+            found = true;
           }
+        } else {
+          const margin = 0.5;
+          const maxDist = R - r - margin;
+          const distStep = 0.2;
 
-          let bestX = 0;
-          let bestY = 0;
-          let found = false;
-          
-          if (placedInThis.length === 0) {
-            if (r <= R - 0.1) {
-              bestX = 0;
-              // When cable is large relative to conduit, placing at exact center
-              // prevents a second cable from fitting. Offset to allow packing.
-              if (3 * r > R - 0.5) {
-                bestY = Math.max(0, Math.min(r, R - r - 0.5));
-              } else {
-                bestY = 0;
-              }
-              found = true;
-            }
-          } else {
-            const margin = 0.5; 
-            const maxDist = R - r - margin;
-            const distStep = 0.2; 
-            
-            for (let dist = 0; dist <= maxDist && !found; dist += distStep) {
-              const numAngles = Math.max(16, Math.floor(dist * 6)); 
-              const currentAngleStep = (Math.PI * 2) / numAngles;
-              
-              for (let angle = 0; angle < Math.PI * 2; angle += currentAngleStep) {
-                const tx = dist * Math.cos(angle);
-                const ty = dist * Math.sin(angle);
-                
-                if (Math.sqrt(tx*tx + ty*ty) + r <= R - margin + 0.1) {
-                  let collision = false;
-                  for (const p of placedInThis) {
-                    const d = Math.sqrt(Math.pow(tx - p.px, 2) + Math.pow(ty - p.py, 2));
-                    if (d < (r + p.diameter/2)) { 
-                      collision = true;
-                      break;
-                    }
-                  }
-                  
-                  if (!collision) {
-                    bestX = tx;
-                    bestY = ty;
-                    found = true;
+          for (let dist = 0; dist <= maxDist && !found; dist += distStep) {
+            const numAngles = Math.max(16, Math.floor(dist * 6));
+            const currentAngleStep = (Math.PI * 2) / numAngles;
+
+            for (let angle = 0; angle < Math.PI * 2; angle += currentAngleStep) {
+              const tx = dist * Math.cos(angle);
+              const ty = dist * Math.sin(angle);
+
+              if (Math.sqrt(tx*tx + ty*ty) + r <= R - margin + 0.1) {
+                let collision = false;
+                for (const p of placedInThis) {
+                  const d = Math.sqrt(Math.pow(tx - p.px, 2) + Math.pow(ty - p.py, 2));
+                  if (d < (r + p.diameter/2)) {
+                    collision = true;
                     break;
                   }
+                }
+
+                if (!collision) {
+                  bestX = tx;
+                  bestY = ty;
+                  found = true;
+                  break;
                 }
               }
             }
           }
-          
-          if (found) {
-            placedInThis.push({ ...unit, px: bestX, py: bestY });
-            currentStructure.currentArea += unitArea;
-            placed = true;
+        }
+
+        if (found) {
+          placedInThis.push({ ...unit, px: bestX, py: bestY });
+          currentStructure.currentArea += unitArea(unit);
+        }
+        return found;
+      };
+
+      groups.forEach(group => {
+        const isPowerGroup = group.units.every(u => u.type === 'power');
+        const isMixedGroup = !isPowerGroup && group.units.some(u => u.type === 'power');
+        const gArea = groupArea(group);
+
+        // Tutto o niente: o l'intero gruppo (stesso tag) entra in un condotto —
+        // area E geometria del cerchio — oppure passa per intero al condotto
+        // successivo. Anche se manca spazio geometrico per un solo cavo del
+        // gruppo mentre gli altri ci starebbero, il gruppo non viene spezzato:
+        // si prova un altro condotto, o se ne apre uno nuovo tutto per lui.
+        let sIdx = 0;
+        let placed = false;
+        while (!placed) {
+          while (sIdx < structures.length) {
+            const s = structures[sIdx];
+            if (s.currentArea + gArea > allowedAreaPerStructure + 0.01) { sIdx++; continue; }
+            if (s.cables.length > 0) {
+              if (isMixedGroup) { sIdx++; continue; }
+              const hasPower = s.cables.some(c => c.type === 'power');
+              if (hasPower !== isPowerGroup) { sIdx++; continue; }
+            }
             break;
           }
-        }
-        
-        if (!placed) {
-          // Use same offset logic for new structures
-          const offset = (3 * r > R - 0.5) ? Math.max(0, Math.min(r, R - r - 0.5)) : 0;
-          structures.push({ cables: [{ ...unit, px: 0, py: offset }], currentArea: unitArea });
+
+          let target: { cables: any[], currentArea: number };
+          let isNewBin = false;
+          if (sIdx >= structures.length) {
+            target = { cables: [], currentArea: 0 };
+            structures.push(target);
+            isNewBin = true;
+          } else {
+            target = structures[sIdx];
+          }
+
+          const snapshotCables = [...target.cables];
+          const snapshotArea = target.currentArea;
+          let allOk = true;
+          for (const unit of group.units) {
+            if (!placeUnitInConduit(target, unit)) { allOk = false; break; }
+          }
+
+          if (allOk) {
+            placed = true;
+          } else if (isNewBin) {
+            // Anche un condotto vuoto e dedicato non basta (limite fisico, es. cavi
+            // troppo grandi): ripristina e piazza quello che si riesce, per non
+            // perdere i cavi.
+            target.cables.length = 0;
+            target.cables.push(...snapshotCables);
+            target.currentArea = snapshotArea;
+            group.units.forEach(u => placeUnitInConduit(target, u));
+            placed = true;
+          } else {
+            target.cables.length = 0;
+            target.cables.push(...snapshotCables);
+            target.currentArea = snapshotArea;
+            sIdx++;
+          }
         }
       });
     } else {
       const maxH = structure.height;
       const W = structure.width;
-      
-      allUnits.forEach(unit => {
-        const unitArea = Math.PI * Math.pow(unit.diameter / 2, 2);
+
+      const placeUnitInTray = (currentStructure: { cables: any[], currentArea: number }, unit: Unit): boolean => {
+        const placedInThis = currentStructure.cables;
+
+        if (structure.hasSeparator) {
+          const margin = 1.5;
+          const midX = W / 2;
+          const isPower = unit.type === 'power';
+          const startX = isPower ? margin : midX + margin;
+          const endX = isPower ? midX - margin : W - margin;
+
+          const sideCables = placedInThis.filter(c => (isPower ? c.px < midX : c.px >= midX));
+
+          let tempX = startX;
+          let tempY = margin;
+          let tempRowH = 0;
+
+          sideCables.forEach(c => {
+            if (tempX + c.diameter > endX + 0.01) {
+              tempX = startX;
+              tempY += tempRowH;
+              tempRowH = 0;
+            }
+            tempX += c.diameter;
+            tempRowH = Math.max(tempRowH, c.diameter);
+          });
+
+          if (tempX + unit.diameter <= endX + 0.01 && tempY + unit.diameter <= maxH - margin + 0.01) {
+            placedInThis.push({ ...unit, px: tempX, py: tempY });
+            currentStructure.currentArea += unitArea(unit);
+            return true;
+          } else if (tempY + tempRowH + unit.diameter <= maxH - margin + 0.01) {
+            placedInThis.push({ ...unit, px: startX, py: tempY + tempRowH });
+            currentStructure.currentArea += unitArea(unit);
+            return true;
+          }
+          return false;
+        } else {
+          const margin = 1.5;
+          let tempX = margin;
+          let tempY = margin;
+          let tempRowH = 0;
+
+          placedInThis.forEach(c => {
+            if (tempX + c.diameter > W - margin + 0.01) {
+              tempX = margin;
+              tempY += tempRowH;
+              tempRowH = 0;
+            }
+            tempX += c.diameter;
+            tempRowH = Math.max(tempRowH, c.diameter);
+          });
+
+          if (tempX + unit.diameter <= W - margin + 0.01 && tempY + unit.diameter <= maxH - margin + 0.01) {
+            placedInThis.push({ ...unit, px: tempX, py: tempY });
+            currentStructure.currentArea += unitArea(unit);
+            return true;
+          } else if (tempY + tempRowH + unit.diameter <= maxH - margin + 0.01) {
+            placedInThis.push({ ...unit, px: margin, py: tempY + tempRowH });
+            currentStructure.currentArea += unitArea(unit);
+            return true;
+          }
+          return false;
+        }
+      };
+
+      groups.forEach(group => {
+        // Stesso principio del condotto: tutto o niente per bin — o l'intero
+        // gruppo (stesso tag) entra nella passerella, o passa per intero a quella
+        // successiva, mai un cavo alla volta.
+        const gArea = groupArea(group);
+        let sIdx = 0;
         let placed = false;
-        
-        for (let sIdx = 0; sIdx < structures.length; sIdx++) {
-          const currentStructure = structures[sIdx];
-          
-          if (currentStructure.currentArea + unitArea > allowedAreaPerStructure + 0.01) {
-            continue;
+        while (!placed) {
+          while (sIdx < structures.length && structures[sIdx].currentArea + gArea > allowedAreaPerStructure + 0.01) sIdx++;
+
+          let target: { cables: any[], currentArea: number };
+          let isNewBin = false;
+          if (sIdx >= structures.length) {
+            target = { cables: [], currentArea: 0 };
+            structures.push(target);
+            isNewBin = true;
+          } else {
+            target = structures[sIdx];
           }
 
-          const placedInThis = currentStructure.cables;
-          
-          if (structure.hasSeparator) {
-            const margin = 1.5;
-            const midX = W / 2;
-            const isPower = unit.type === 'power';
-            const startX = isPower ? margin : midX + margin;
-            const endX = isPower ? midX - margin : W - margin;
-            
-            const sideCables = placedInThis.filter(c => (isPower ? c.px < midX : c.px >= midX));
-            
-            let tempX = startX;
-            let tempY = margin;
-            let tempRowH = 0;
-            
-            sideCables.forEach(c => {
-              if (tempX + c.diameter > endX + 0.01) {
-                tempX = startX;
-                tempY += tempRowH;
-                tempRowH = 0;
-              }
-              tempX += c.diameter;
-              tempRowH = Math.max(tempRowH, c.diameter);
-            });
-            
-            if (tempX + unit.diameter <= endX + 0.01 && tempY + unit.diameter <= maxH - margin + 0.01) {
-              placedInThis.push({ ...unit, px: tempX, py: tempY });
-              currentStructure.currentArea += unitArea;
-              placed = true;
-              break;
-            } else if (tempY + tempRowH + unit.diameter <= maxH - margin + 0.01) {
-              placedInThis.push({ ...unit, px: startX, py: tempY + tempRowH });
-              currentStructure.currentArea += unitArea;
-              placed = true;
-              break;
-            }
-          } else {
-            const margin = 1.5;
-            let tempX = margin;
-            let tempY = margin;
-            let tempRowH = 0;
-            
-            placedInThis.forEach(c => {
-              if (tempX + c.diameter > W - margin + 0.01) {
-                tempX = margin;
-                tempY += tempRowH;
-                tempRowH = 0;
-              }
-              tempX += c.diameter;
-              tempRowH = Math.max(tempRowH, c.diameter);
-            });
-            
-            if (tempX + unit.diameter <= W - margin + 0.01 && tempY + unit.diameter <= maxH - margin + 0.01) {
-              placedInThis.push({ ...unit, px: tempX, py: tempY });
-              currentStructure.currentArea += unitArea;
-              placed = true;
-              break;
-            } else if (tempY + tempRowH + unit.diameter <= maxH - margin + 0.01) {
-              placedInThis.push({ ...unit, px: margin, py: tempY + tempRowH });
-              currentStructure.currentArea += unitArea;
-              placed = true;
-              break;
-            }
+          const snapshotCables = [...target.cables];
+          const snapshotArea = target.currentArea;
+          let allOk = true;
+          for (const unit of group.units) {
+            if (!placeUnitInTray(target, unit)) { allOk = false; break; }
           }
-        }
-        
-        if (!placed) {
-          const margin = 1.5;
-          const startX = structure.hasSeparator && unit.type !== 'power' ? structure.width/2 + margin : margin;
-          structures.push({ cables: [{ ...unit, px: startX, py: margin }], currentArea: unitArea });
+
+          if (allOk) {
+            placed = true;
+          } else if (isNewBin) {
+            target.cables.length = 0;
+            target.cables.push(...snapshotCables);
+            target.currentArea = snapshotArea;
+            group.units.forEach(u => placeUnitInTray(target, u));
+            placed = true;
+          } else {
+            target.cables.length = 0;
+            target.cables.push(...snapshotCables);
+            target.currentArea = snapshotArea;
+            sIdx++;
+          }
         }
       });
     }

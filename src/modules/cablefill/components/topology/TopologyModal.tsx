@@ -806,7 +806,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
                     <div className="space-y-2">
                       {circuits.map(c => (
                         <div key={c.id} className="flex items-center gap-4 p-3 border border-black/10 dark:border-white/10 rounded-lg dark:text-white">
-                          <span className="text-[11px] font-black w-10 shrink-0" style={{ color: '#81292C' }}>{c.tag}</span>
+                          <span className="text-[11px] font-black w-10 shrink-0 uppercase" style={{ color: '#81292C' }}>{c.tag}</span>
                           <span className="text-[10px] opacity-60">{c.from}</span>
                           <span className="text-[9px] opacity-30 mx-1">→</span>
                           <span className="text-[10px] opacity-60">{c.to}</span>
@@ -909,7 +909,7 @@ export function TopologyModal({ isOpen, onClose, onConfirm, darkMode, groupId, g
                       <div className="mt-2 space-y-1">
                         {circuits.map(c => (
                           <div key={c.id} className="text-[9px] dark:text-white/60">
-                            <span className="font-black" style={{ color: '#81292C' }}>{c.tag}</span>
+                            <span className="font-black uppercase" style={{ color: '#81292C' }}>{c.tag}</span>
                             {c.cables && c.cables.length > 0
                               ? c.cables.map((cb, i) => <span key={i} className="ml-2 opacity-60">{cb.quantity}× {cb.name} {cb.section}mm² ({cb.conductors}C)</span>)
                               : <span className="ml-2 opacity-30 italic">nessun cavo identificato</span>

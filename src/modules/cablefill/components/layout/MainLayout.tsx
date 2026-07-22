@@ -6,7 +6,7 @@ import { useProject } from '../../context/ProjectContext';
 import { TRANSLATIONS } from '../../constants';
 // Icons
 import {
-  LayoutDashboard, Layers, CircleDot, Database, ChevronLeft, Save, Folder, LogOut, Sun, Moon, Keyboard, Plus, Zap, User as UserIcon, X, Download, FileText, Globe, GitBranch, FolderKanban, ChevronDown, Trash2, Check
+  LayoutDashboard, Layers, CircleDot, Database, ChevronLeft, Save, Folder, LogOut, Sun, Moon, Keyboard, Plus, Zap, User as UserIcon, X, Download, FileText, Globe, GitBranch, FolderKanban, ChevronDown, Trash2, Check, Undo2, Redo2
 } from 'lucide-react';
 import { Cable, StandardStructure, TopologyCircuit, TopologyProjectConfig } from '../../types';
 import { Toast } from '../Toast';
@@ -16,7 +16,7 @@ import { ReportModal } from '../ReportModal';
 import { ShortcutsModal } from '../ShortcutsModal';
 import { TopologyModal } from '../topology/TopologyModal';
 import { supabase } from '../../lib/supabase';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -73,7 +73,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
     addNewProject,
     addProjectsFromTopology,
     deleteProject,
-    renameProject
+    renameProject,
+    undo,
+    redo,
+    canUndo,
+    canRedo
   } = useProject();
 
   const [isTopologyModalOpen, setIsTopologyModalOpen] = useState(false);
@@ -241,6 +245,25 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                  activeTab === 'users' ? t.userManagement.title : 
                  t.sidebar.overview}
               </h2>
+            </div>
+
+            <div className="flex items-center gap-1 ml-2 pl-3 border-l border-black/10 dark:border-white/10">
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                title="Annulla (Ctrl+Z)"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
+              >
+                <Undo2 size={16} />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                title="Ripeti (Ctrl+Shift+Z)"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
+              >
+                <Redo2 size={16} />
+              </button>
             </div>
           </div>
 
@@ -429,9 +452,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         </div>
 
         {/* Dynamic Content */}
-        <AnimatePresence mode="wait">
-          {children}
-        </AnimatePresence>
+        {children}
 
       </main>
 

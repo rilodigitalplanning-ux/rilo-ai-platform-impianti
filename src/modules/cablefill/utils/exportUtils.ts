@@ -3,6 +3,21 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ProjectCable, Structure, Cable, Translation } from '../types';
 
+// Palette fissa per tipo di cavo — usata SEMPRE nell'export PDF, indipendentemente
+// dal colore personalizzato assegnato all'istanza (pc.color). Garantisce che lo
+// stesso tipo di cavo abbia sempre lo stesso colore su ogni sezione/pagina, così
+// più fogli dello stesso progetto non arrivano con layer/colori diversi in CAD.
+const CABLE_TYPE_COLOR_RGB: Record<Cable['type'], [number, number, number]> = {
+  power: [230, 57, 70],   // #E63946
+  data:  [0, 180, 216],   // #00B4D8
+  evac:  [255, 190, 11],  // #FFBE0B
+  irai:  [131, 56, 236],  // #8338EC
+};
+
+function getCableTypeColor(type: Cable['type'] | undefined): [number, number, number] {
+  return CABLE_TYPE_COLOR_RGB[type as Cable['type']] || CABLE_TYPE_COLOR_RGB.power;
+}
+
 export interface ReportData {
   reportId: string;
   today: string;
@@ -138,17 +153,7 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
             cy = schematicBoxY + (structH - cable.py - cable.diameter / 2) * scale;
           }
 
-          // Parse hex color
-          let rColor = 227, gColor = 52, bColor = 47;
-          const cableColor = cable.color || (cable.type === 'power' ? '#81292C' : '#00B4D8');
-          if (cableColor.startsWith('#')) {
-            const hex = cableColor.replace('#', '');
-            if (hex.length === 6) {
-              rColor = parseInt(hex.substring(0, 2), 16);
-              gColor = parseInt(hex.substring(2, 4), 16);
-              bColor = parseInt(hex.substring(4, 6), 16);
-            }
-          }
+          const [rColor, gColor, bColor] = getCableTypeColor(cable.type);
 
           pdf.setDrawColor(rColor, gColor, bColor);
           pdf.setFillColor(rColor, gColor, bColor);
@@ -157,15 +162,12 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
           pdf.setTextColor(255, 255, 255);
           pdf.setFont('helvetica', 'bold');
           pdf.setFontSize(Math.max(4, r * 1.5));
-          // We don't have the original index easily, so we just use index+1 for this structure
-          // To get the global index, we could search in data.cables, but it's complex.
-          // Let's just use the cable's diameter as a label if it's too hard, or find its index.
           const label = cable.originalIndex !== undefined ? (cable.originalIndex + 1).toString() : (index + 1).toString();
           pdf.text(label, cx, cy + (r * 0.35), { align: 'center' });
         });
       } else {
         // Fallback to old logic if packedStructures is missing
-        const positions: { x: number, y: number, r: number, color: string }[] = [];
+        const positions: { x: number, y: number, r: number, type: Cable['type'] }[] = [];
         let currentX = 0;
         let currentY = 0;
         let rowMaxHeight = 0;
@@ -173,7 +175,7 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
         const cablesToDraw = data.cables.flatMap(pc => {
           const cable = pc.cable;
           if (!cable) return [];
-          return Array(pc.quantity).fill({ ...cable, color: pc.color || '#e3342f' });
+          return Array(pc.quantity).fill(cable);
         });
 
         cablesToDraw.forEach(cable => {
@@ -187,7 +189,7 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
             x: currentX + cable.diameter / 2,
             y: currentY + cable.diameter / 2,
             r: cable.diameter / 2,
-            color: cable.color
+            type: cable.type
           });
 
           currentX += cable.diameter;
@@ -205,15 +207,7 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
           const cy = schematicBoxY + singleBoxH - (pos.y * scale);
           const r = pos.r * scale;
 
-          let rColor = 227, gColor = 52, bColor = 47;
-          if (pos.color.startsWith('#')) {
-            const hex = pos.color.replace('#', '');
-            if (hex.length === 6) {
-              rColor = parseInt(hex.substring(0, 2), 16);
-              gColor = parseInt(hex.substring(2, 4), 16);
-              bColor = parseInt(hex.substring(4, 6), 16);
-            }
-          }
+          const [rColor, gColor, bColor] = getCableTypeColor(pos.type);
 
           pdf.setDrawColor(rColor, gColor, bColor);
           pdf.setFillColor(rColor, gColor, bColor);
@@ -257,7 +251,7 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
         (index + 1).toString(),
         cable?.name || 'Unknown',
         cable?.size || `${cable?.diameter}mm`,
-        pc.tag || '-',
+        (pc.tag || '-').toUpperCase(),
         pc.quantity.toString()
       ];
     });
@@ -293,7 +287,7 @@ export const exportToCSV = (cables: ProjectCable[], filename: string) => {
       (index + 1).toString(),
       pc.cable?.name || 'Unknown',
       pc.cable?.size || `${pc.cable?.diameter}mm`,
-      pc.tag || '-',
+      (pc.tag || '-').toUpperCase(),
       pc.quantity.toString()
     ]);
     
