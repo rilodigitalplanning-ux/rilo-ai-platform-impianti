@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun } from 'lucide-react';
+import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 const MODULES = [
@@ -40,6 +40,18 @@ const MODULES = [
     accent: '#1f7a8c',
     primary: '#0d2b3a',
     tags: ['Schema Unifilare', 'Export Excel', 'Lettura IA', 'Quadri'],
+  },
+  {
+    id: 'cme-editor',
+    route: '/cme-editor',
+    name: 'CME Editor',
+    tagline: 'Strumenti rapidi per computi ed elenchi prezzi',
+    description:
+      "Carica un elenco prezzi esportato da Primus e ottieni una versione pulita: voci a quantità zero rimosse, prezzi in lettere eliminati, colonne Prezzo/Importo pronte da compilare.",
+    icon: Wrench,
+    accent: '#6c63ff',
+    primary: '#2b2d42',
+    tags: ['Elenco Prezzi', 'Pulizia Excel', 'Primus', 'Export'],
   },
 ] as const;
 

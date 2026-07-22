@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
-import { ChevronLeft, FileSpreadsheet, Table2, Sun, Moon, LogOut } from 'lucide-react';
+import { ChevronLeft, FileSpreadsheet, Table2, Sun, Moon, LogOut, Undo2, Redo2 } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
 import { Toast } from '../Toast';
 import { Logo } from '@/components/Logo';
@@ -40,7 +40,7 @@ function NavItem({
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
-  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab } = useApp();
+  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab, undo, redo, canUndo, canRedo } = useApp();
 
   const user = (() => {
     try { return JSON.parse(localStorage.getItem('cablefill_user') ?? 'null'); } catch { return null; }
@@ -139,6 +139,25 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               <h2 className="text-[11px] font-bold uppercase tracking-tight dark:text-white">
                 {tabs.find(tab => tab.id === activeTab)?.label ?? ''}
               </h2>
+            </div>
+
+            <div className="flex items-center gap-1 ml-2 pl-3 border-l border-black/10 dark:border-white/10">
+              <button
+                onClick={undo}
+                disabled={!canUndo}
+                title="Annulla (Ctrl+Z)"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
+              >
+                <Undo2 size={16} />
+              </button>
+              <button
+                onClick={redo}
+                disabled={!canRedo}
+                title="Ripeti (Ctrl+Shift+Z)"
+                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
+              >
+                <Redo2 size={16} />
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-6">

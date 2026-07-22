@@ -1,10 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
-import { ChevronLeft, LayoutDashboard, Layers, BarChart2, Sun, Moon, LogOut, Save, Folder, Undo2, Redo2 } from 'lucide-react';
+import { ChevronLeft, Wrench, FileSpreadsheet, Sun, Moon, LogOut } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
 import { Toast } from '../Toast';
-import { AIChat } from '../AIChat';
 import { Logo } from '@/components/Logo';
 
 function NavItem({
@@ -12,7 +11,7 @@ function NavItem({
   label,
   active = false,
   onClick,
-  accentColor = '#2d6a4f',
+  accentColor = '#6c63ff',
 }: {
   icon: React.ReactNode;
   label: string;
@@ -41,16 +40,14 @@ function NavItem({
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
-  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab, currentProject, showToast, undo, redo, canUndo, canRedo } = useApp();
+  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab } = useApp();
 
   const user = (() => {
     try { return JSON.parse(localStorage.getItem('cablefill_user') ?? 'null'); } catch { return null; }
   })();
 
   const tabs: { id: AppTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'overview', label: 'Panoramica', icon: <LayoutDashboard size={18} /> },
-    { id: 'zones', label: 'Zone / Circuiti', icon: <Layers size={18} /> },
-    { id: 'results', label: 'Risultati', icon: <BarChart2 size={18} /> },
+    { id: 'elenco-prezzi', label: 'Pulizia Elenco Prezzi', icon: <FileSpreadsheet size={18} /> },
   ];
 
   return (
@@ -64,7 +61,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         <div className="p-6 flex items-center gap-3 border-b border-white/10">
           <Logo className="w-10 h-10 text-white" />
           <div>
-            <h1 className="text-sm font-bold tracking-wider uppercase">Load Analysis</h1>
+            <h1 className="text-sm font-bold tracking-wider uppercase">CME Editor</h1>
             <p className="text-[10px] opacity-50">SISTEMA DI INGEGNERIA</p>
           </div>
         </div>
@@ -81,7 +78,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
         {/* Navigation */}
         <nav className="flex-1 py-8 px-4 space-y-8 overflow-y-auto custom-scrollbar">
           <div>
-            <p className="text-[10px] font-bold opacity-40 mb-4 tracking-widest">NAVIGAZIONE</p>
+            <p className="text-[10px] font-bold opacity-40 mb-4 tracking-widest">STRUMENTI</p>
             <div className="space-y-1">
               {tabs.map(tab => (
                 <NavItem
@@ -95,36 +92,10 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               ))}
             </div>
           </div>
-
-          {/* Current project info */}
-          {currentProject && (
-            <div>
-              <p className="text-[10px] font-bold opacity-40 mb-4 tracking-widest">PROGETTO ATTIVO</p>
-              <div className="px-3 py-2 rounded bg-white/5 border border-white/10">
-                <div className="flex items-center gap-2">
-                  <Folder size={14} className="text-white/50 shrink-0" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider truncate">{currentProject.name}</span>
-                </div>
-              </div>
-            </div>
-          )}
         </nav>
 
-        {/* Footer: user + actions */}
+        {/* Footer: user */}
         <div className="p-6 border-t border-white/10">
-          {/* Save */}
-          <div className="flex items-center gap-2 mb-4">
-            <button
-              onClick={() => showToast('Progetto salvato', 'success')}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest text-white transition-all"
-              style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
-            >
-              <Save size={13} />
-              Salva
-            </button>
-          </div>
-
-          {/* User info */}
           {user && (
             <div className="flex items-center gap-3 min-w-0">
               <div
@@ -158,34 +129,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               className="w-7 h-7 rounded flex items-center justify-center shadow-sm"
               style={{ backgroundColor: moduleTheme.accent }}
             >
-              <BarChart2 size={14} className="text-white" />
+              <Wrench size={14} className="text-white" />
             </div>
             <div>
               <p className="text-[9px] font-bold opacity-40 uppercase tracking-widest dark:text-white/40">
-                Load Analysis
+                CME Editor
               </p>
               <h2 className="text-[11px] font-bold uppercase tracking-tight dark:text-white">
                 {tabs.find(tab => tab.id === activeTab)?.label ?? ''}
               </h2>
-            </div>
-
-            <div className="flex items-center gap-1 ml-2 pl-3 border-l border-black/10 dark:border-white/10">
-              <button
-                onClick={undo}
-                disabled={!canUndo}
-                title="Annulla (Ctrl+Z)"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
-              >
-                <Undo2 size={16} />
-              </button>
-              <button
-                onClick={redo}
-                disabled={!canRedo}
-                title="Ripeti (Ctrl+Shift+Z)"
-                className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20 disabled:cursor-not-allowed transition-colors dark:text-white"
-              >
-                <Redo2 size={16} />
-              </button>
             </div>
           </div>
           <div className="flex items-center gap-6">
@@ -206,7 +158,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                 </>
               )}
             </button>
-            <div id="header-action-portal" className="flex items-center"></div>
           </div>
         </header>
 
@@ -219,9 +170,6 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
           {toastData && <Toast key="toast" message={toastData.message} type={toastData.type} />}
         </AnimatePresence>
       </div>
-
-      {/* AI Chat */}
-      <AIChat />
     </div>
   );
 };

@@ -16,21 +16,6 @@ import {
 } from '../../constants/coefficients';
 import { calculateProject } from '../../utils/calculator';
 
-const EMPTY_PROJECT = (): LoadProject => ({
-  id: crypto.randomUUID(),
-  name: '',
-  client: '',
-  buildingType: 'uffici',
-  qualityLevel: 'standard',
-  climateZone: 'E',
-  envelopeType: 'muratura_pesante',
-  hvacMode: 'parametrico',
-  hvacEquipment: { heatPumps: [], ahus: [], pumps: [] },
-  zones: [],
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
-
 const EMPTY_ZONE = (): Zone => ({
   id: crypto.randomUUID(),
   name: '',
@@ -44,10 +29,9 @@ const EMPTY_ZONE = (): Zone => ({
 type Section = 'overview' | 'zones' | 'results';
 
 export const LoadAnalysisView: React.FC = () => {
-  const { moduleTheme, showToast, savedProjects, setSavedProjects, setCurrentProject, currentProject, activeTab, setActiveTab } = useApp();
+  const { moduleTheme, showToast, savedProjects, setSavedProjects, setCurrentProject, currentProject, activeTab, setActiveTab, editingProject, setEditingProject } = useApp();
   const activeSection = activeTab as Section;
   const setActiveSection = setActiveTab as (s: Section) => void;
-  const [editingProject, setEditingProject] = useState<LoadProject>(() => currentProject ?? EMPTY_PROJECT());
 
   // Portal target nella top bar del MainLayout, per il bottone "Calcola"
   const [headerActionPortal, setHeaderActionPortal] = useState<HTMLElement | null>(null);
