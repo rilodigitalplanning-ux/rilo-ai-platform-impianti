@@ -7,8 +7,8 @@
  */
 
 import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
 import type { ParsedSchema } from '../types';
+import { saveFileWithPicker } from '@/utils/fileSave';
 
 const COLUMNS = [
   { header: 'Descrizione', width: 40 },
@@ -144,5 +144,10 @@ export async function exportSchemaToExcel(schema: ParsedSchema, fileName = 'quad
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
-  saveAs(blob, fileName);
+  await saveFileWithPicker(blob, {
+    suggestedName: fileName,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    extensions: ['.xlsx'],
+    description: 'Foglio Excel',
+  });
 }

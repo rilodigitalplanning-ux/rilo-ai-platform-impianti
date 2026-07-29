@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Upload, FileSpreadsheet, Loader2, Download, X, CheckCircle2, ListChecks } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { parseElencoPrezzi } from '../../utils/parseElencoPrezzi';
-import { exportElencoPrezzi } from '../../utils/exportElencoPrezzi';
+import { exportElencoPrezzi, exportWorkbook } from '../../utils/exportElencoPrezzi';
 
 function friendlyErrorMessage(e: any): string {
   return String(e?.message || e || 'Errore sconosciuto durante la lettura del file.');
@@ -38,7 +38,11 @@ export const CMEEditorView: React.FC = () => {
     if (!result) return;
     try {
       const baseName = result.fileName.replace(/\.(xls|xlsx)$/i, '');
-      await exportElencoPrezzi(result.rows, `${baseName} - pulito.xlsx`);
+      if (result.stylePreserved && result.editedWorkbook) {
+        await exportWorkbook(result.editedWorkbook, `${baseName} - pulito.xlsx`);
+      } else {
+        await exportElencoPrezzi(result.rows, `${baseName} - pulito.xlsx`);
+      }
       showToast('Excel esportato con successo!', 'success');
     } catch (e: any) {
       showToast(e?.message || 'Errore durante l\'esportazione', 'error');
@@ -154,6 +158,13 @@ export const CMEEditorView: React.FC = () => {
                       Formatta Prezzo e Importo come valuta (€) e imposta Importo = Prezzo × Quantità.
                     </li>
                   </ol>
+                  <div className="mt-6 p-3 rounded-lg bg-black/5 dark:bg-white/5">
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-1">Nota sullo stile</p>
+                    <p className="text-[10px] dark:text-white/60">
+                      Con un file <strong>.xlsx</strong> i colori e lo stile originali vengono preservati al 100%.
+                      Con un file <strong>.xls</strong> (il default di Primus) questo non è tecnicamente possibile — il file pulito userà uno stile standard.
+                    </p>
+                  </div>
                 </section>
               </div>
             </div>
@@ -182,6 +193,13 @@ export const CMEEditorView: React.FC = () => {
                 <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
                   Pulizia completata su "{result.fileName}". Verifica l'anteprima qui sotto ed esporta l'Excel.
                 </p>
+                <span className={`ml-auto shrink-0 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                  result.stylePreserved
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                }`}>
+                  {result.stylePreserved ? 'Stile originale preservato' : 'Stile standard (.xls)'}
+                </span>
               </div>
 
               <section className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-3xl premium-shadow overflow-hidden">

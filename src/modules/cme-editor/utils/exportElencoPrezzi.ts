@@ -8,8 +8,8 @@
  */
 
 import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
 import type { ElencoPrezziRow } from '../types';
+import { saveFileWithPicker } from '@/utils/fileSave';
 
 const EURO_FORMAT = '€ #,##0.00';
 
@@ -112,5 +112,22 @@ export async function exportElencoPrezzi(rows: ElencoPrezziRow[], fileName = 'el
 
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/octet-stream' });
-  saveAs(blob, fileName);
+  await saveFileWithPicker(blob, {
+    suggestedName: fileName,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    extensions: ['.xlsx'],
+    description: 'Foglio Excel',
+  });
+}
+
+/** Esporta un workbook già pronto (es. modificato "sul posto" da un .xlsx originale). */
+export async function exportWorkbook(workbook: ExcelJS.Workbook, fileName: string) {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  await saveFileWithPicker(blob, {
+    suggestedName: fileName,
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    extensions: ['.xlsx'],
+    description: 'Foglio Excel',
+  });
 }

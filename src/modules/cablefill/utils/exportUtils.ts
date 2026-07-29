@@ -2,6 +2,7 @@ import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ProjectCable, Structure, Cable, Translation } from '../types';
+import { saveFileWithPicker } from '@/utils/fileSave';
 
 // Palette fissa per tipo di cavo — usata SEMPRE nell'export PDF, indipendentemente
 // dal colore personalizzato assegnato all'istanza (pc.color). Garantisce che lo
@@ -273,14 +274,20 @@ export const exportToPDF = async (data: ReportData, filename: string) => {
       margin: { left: margin, right: margin }
     });
 
-    pdf.save(`${filename}.pdf`);
+    const blob = pdf.output('blob');
+    await saveFileWithPicker(blob, {
+      suggestedName: `${filename}.pdf`,
+      mimeType: 'application/pdf',
+      extensions: ['.pdf'],
+      description: 'Documento PDF',
+    });
   } catch (error) {
     console.error('Error generating PDF:', error);
     throw new Error('Erro ao gerar PDF vetorial. Por favor, tente novamente.');
   }
 };
 
-export const exportToCSV = (cables: ProjectCable[], filename: string) => {
+export const exportToCSV = async (cables: ProjectCable[], filename: string) => {
   try {
     const headers = ['#', 'SPECIFICATION', 'DIMENSION', 'TAG', 'QTY'];
     const rows = cables.map((pc, index) => [
@@ -290,23 +297,19 @@ export const exportToCSV = (cables: ProjectCable[], filename: string) => {
       (pc.tag || '-').toUpperCase(),
       pc.quantity.toString()
     ]);
-    
+
     const csvContent = [
       headers.join(','),
       ...rows.map(r => r.join(','))
     ].join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${filename}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
+    await saveFileWithPicker(blob, {
+      suggestedName: `${filename}.csv`,
+      mimeType: 'text/csv',
+      extensions: ['.csv'],
+      description: 'File CSV',
+    });
   } catch (error) {
     console.error('Error exporting CSV:', error);
   }

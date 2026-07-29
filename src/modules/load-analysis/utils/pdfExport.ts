@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import type { LoadProject } from '../types';
 import type { LightingCalculationResult } from './lightingCalculator';
 import { USAGE_LABELS, BUILDING_TYPE_LABELS } from '../constants/coefficients';
+import { saveFileWithPicker } from '@/utils/fileSave';
 
 type RGB = [number, number, number];
 
@@ -221,7 +222,7 @@ function drawFooter(doc: jsPDF) {
   }
 }
 
-export function exportLightingPdf(project: LoadProject, lr: LightingCalculationResult): void {
+export async function exportLightingPdf(project: LoadProject, lr: LightingCalculationResult): Promise<void> {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
   drawHeader(doc, project);
@@ -241,5 +242,11 @@ export function exportLightingPdf(project: LoadProject, lr: LightingCalculationR
   drawFooter(doc);
 
   const filename = `RILO_LoadAnalysis_Illuminazione_${project.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  doc.save(filename);
+  const blob = doc.output('blob');
+  await saveFileWithPicker(blob, {
+    suggestedName: filename,
+    mimeType: 'application/pdf',
+    extensions: ['.pdf'],
+    description: 'Documento PDF',
+  });
 }

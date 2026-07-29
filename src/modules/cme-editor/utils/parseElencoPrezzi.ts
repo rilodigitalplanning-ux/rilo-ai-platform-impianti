@@ -11,6 +11,7 @@
 
 import * as XLSX from 'xlsx';
 import type { ElencoPrezziResult, ElencoPrezziRow } from '../types';
+import { editElencoPrezziXlsxInPlace } from './editElencoPrezziXlsx';
 
 function parseItalianNumber(raw: string): number {
   if (!raw) return 0;
@@ -41,7 +42,35 @@ function findHeaderLayout(rows: string[][]): { headerRowIdx: number; tariffaCol:
   return null;
 }
 
+/**
+ * Punto di ingresso principale: per i file .xlsx modifica il workbook originale
+ * sul posto, preservando al 100% colori e stile; per i file .xls legacy (il
+ * default di Primus, i cui stili non sono leggibili con librerie gratuite)
+ * ricostruisce il file con uno stile pulito standard.
+ */
 export async function parseElencoPrezzi(file: File): Promise<ElencoPrezziResult> {
+  const isXlsx = /\.xlsx$/i.test(file.name);
+  if (isXlsx) {
+    try {
+      const { workbook, rows, originalCount, removedZeroQty } = await editElencoPrezziXlsxInPlace(file);
+      return {
+        fileName: file.name,
+        rows,
+        originalCount,
+        removedZeroQty,
+        stylePreserved: true,
+        editedWorkbook: workbook,
+      };
+    } catch (e: any) {
+      // Se il file .xlsx non è leggibile con ExcelJS (raro, formato non standard),
+      // ripiega sull'estrazione via SheetJS senza stile.
+      console.error('Modifica in-place fallita, ripiego sulla ricostruzione pulita:', e);
+    }
+  }
+  return parseElencoPrezziLegacy(file);
+}
+
+async function parseElencoPrezziLegacy(file: File): Promise<ElencoPrezziResult> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheetName = workbook.SheetNames[0];
@@ -94,5 +123,6 @@ export async function parseElencoPrezzi(file: File): Promise<ElencoPrezziResult>
     rows: result,
     originalCount,
     removedZeroQty,
+    stylePreserved: false,
   };
 }
