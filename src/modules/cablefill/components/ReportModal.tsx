@@ -101,9 +101,9 @@ export function ReportModal({
               
               <div className="flex flex-wrap gap-8 items-center justify-center p-8 border border-black/10 rounded-xl bg-white min-h-[300px]">
                 {packedStructures.map((packedStructure, idx) => (
-                  <StructurePreview 
+                  <StructurePreview
                     key={idx}
-                    structure={structure}
+                    structure={packedStructure.customStructure || structure}
                     cables={cables}
                     allCables={allCables}
                     packedCables={packedStructure.cables}

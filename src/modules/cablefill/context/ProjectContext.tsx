@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import { Project, ProjectGroup, Structure, ProjectCable, TopologyCircuit, TopologyProjectConfig } from '../types';
+import { Project, ProjectGroup, Structure, ProjectCable, TopologyCircuit, TopologyProjectConfig, ManualSpareStructure } from '../types';
 import { useAuth } from './AuthContext';
 
 const DEFAULT_GROUP_NAME = 'NUOVO PROGETTO';
@@ -34,6 +34,9 @@ interface ProjectContextType {
   duplicateProject: (id: string) => void;
   setStructure: (update: Structure | ((s: Structure) => Structure)) => void;
   setProjectCables: (update: ProjectCable[] | ((pc: ProjectCable[]) => ProjectCable[])) => void;
+  addManualSpareStructure: (spare: Omit<ManualSpareStructure, 'id'>) => void;
+  removeManualSpareStructure: (id: string) => void;
+  updateManualSpareStructure: (id: string, updates: Partial<Omit<ManualSpareStructure, 'id'>>) => void;
 
   // Cronologia modifiche (struttura + cavi della struttura attiva) — fino a 10 passi
   undo: () => void;
@@ -410,6 +413,24 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     updateActiveProject({ projectCables: newCables });
   };
 
+  const addManualSpareStructure = (spare: Omit<ManualSpareStructure, 'id'>) => {
+    if (!activeProject) return;
+    const newSpare: ManualSpareStructure = { ...spare, id: crypto.randomUUID() };
+    updateActiveProject({ manualSpareStructures: [...(activeProject.manualSpareStructures || []), newSpare] });
+  };
+
+  const removeManualSpareStructure = (id: string) => {
+    if (!activeProject) return;
+    updateActiveProject({ manualSpareStructures: (activeProject.manualSpareStructures || []).filter(s => s.id !== id) });
+  };
+
+  const updateManualSpareStructure = (id: string, updates: Partial<Omit<ManualSpareStructure, 'id'>>) => {
+    if (!activeProject) return;
+    updateActiveProject({
+      manualSpareStructures: (activeProject.manualSpareStructures || []).map(s => s.id === id ? { ...s, ...updates } : s)
+    });
+  };
+
   const undo = () => {
     if (!activeProject || history.length === 0) return;
     const last = history[history.length - 1];
@@ -457,6 +478,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
       renameProject, addNewProject, addProjectsFromTopology,
       deleteProject, duplicateProject, setStructure,
       setProjectCables,
+      addManualSpareStructure, removeManualSpareStructure, updateManualSpareStructure,
       undo, redo, canUndo: history.length > 0, canRedo: redoStack.length > 0
     }}>
       {children}

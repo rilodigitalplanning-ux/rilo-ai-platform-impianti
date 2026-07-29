@@ -41,9 +41,10 @@ export const DashboardView = () => {
     selectedCableId, setSelectedCableId 
   } = useDatabase();
   
-  const { 
+  const {
     projects, activeProject, activeProjectId, setActiveProjectId,
-    addNewProject, deleteProject, duplicateProject, renameProject, setStructure, setProjectCables
+    addNewProject, deleteProject, duplicateProject, renameProject, setStructure, setProjectCables,
+    addManualSpareStructure, removeManualSpareStructure
   } = useProject();
 
   const [cableQty, setCableQty] = useState(1);
@@ -51,6 +52,11 @@ export const DashboardView = () => {
   const [cableSearch, setCableSearch] = useState('');
   const [warning, setWarning] = useState<string | null>(null);
   const [previewZoom, setPreviewZoom] = useState(1);
+
+  const [manualSpareName, setManualSpareName] = useState('');
+  const [manualSpareType, setManualSpareType] = useState<'tray' | 'conduit'>('conduit');
+  const [manualSpareStandardId, setManualSpareStandardId] = useState('');
+  const [manualSpareQty, setManualSpareQty] = useState(1);
 
   const [isExporting, setIsExporting] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -279,7 +285,7 @@ export const DashboardView = () => {
       }
     });
 
-    const structures: { cables: any[], currentArea: number }[] = [{ cables: [], currentArea: 0 }];
+    const structures: { cables: any[], currentArea: number, isSpare?: boolean, customStructure?: Structure }[] = [{ cables: [], currentArea: 0 }];
     const totalStructureArea = structure.type === 'conduit'
       ? Math.PI * Math.pow(structure.width / 2, 2)
       : structure.width * structure.height;
@@ -524,15 +530,36 @@ export const DashboardView = () => {
         structures.push({ cables: [], currentArea: 0, isSpare: true });
       }
     }
-    
+
+    // Riserve manuali: cavidotti/passerelle vuoti con dimensione e nome propri,
+    // indipendenti dalla struttura principale del progetto.
+    (activeProject?.manualSpareStructures || []).forEach(spare => {
+      const customStructure: Structure = {
+        id: spare.id,
+        name: spare.name,
+        type: spare.type,
+        width: spare.width,
+        height: spare.height,
+        fillLimit: structure.fillLimit,
+      };
+      for (let i = 0; i < spare.quantity; i++) {
+        structures.push({ cables: [], currentArea: 0, isSpare: true, customStructure });
+      }
+    });
+
     return structures.map(s => {
+      const area = s.customStructure
+        ? (s.customStructure.type === 'conduit'
+          ? Math.PI * Math.pow(s.customStructure.width / 2, 2)
+          : s.customStructure.width * s.customStructure.height)
+        : totalStructureArea;
       return {
         ...s,
-        fillPercentage: (s.currentArea / totalStructureArea) * 100,
-        limit: structure.fillLimit
+        fillPercentage: (s.currentArea / area) * 100,
+        limit: s.customStructure?.fillLimit ?? structure.fillLimit
       };
     });
-  }, [structure, projectCables, customCables]);
+  }, [structure, projectCables, customCables, activeProject?.manualSpareStructures]);
 
   const calculationResults = useMemo(() => {
     if (!structure) return {
@@ -787,6 +814,94 @@ export const DashboardView = () => {
             </div>
 
             <div className="pt-4 border-t border-black/5 dark:border-white/5">
+              <label className="block text-[10px] font-bold opacity-40 mb-2 tracking-widest uppercase">{t.input.manualSpares}</label>
+              <div className="space-y-2 mb-2">
+                {(activeProject?.manualSpareStructures || []).map(spare => (
+                  <div key={spare.id} className="flex items-center justify-between gap-2 bg-[#efefef] dark:bg-white/5 border border-black/5 dark:border-white/5 p-2 text-[10px]">
+                    <div className="flex-1 font-bold dark:text-white truncate">
+                      {spare.name} — {spare.type === 'conduit' ? `Ø${spare.width}mm` : `${spare.width}×${spare.height}mm`} × {spare.quantity}
+                    </div>
+                    <button onClick={() => removeManualSpareStructure(spare.id)} className="text-[#81292C] hover:opacity-70 shrink-0">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2 bg-[#efefef]/50 dark:bg-white/5 p-2 border border-dashed border-black/10 dark:border-white/10">
+                <input
+                  type="text"
+                  placeholder={t.input.spareNamePlaceholder}
+                  value={manualSpareName}
+                  onChange={(e) => setManualSpareName(e.target.value)}
+                  className="w-full bg-white dark:bg-[#141414] border border-black/5 dark:border-white/10 p-1.5 text-[10px] outline-none dark:text-white"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={manualSpareType}
+                    onChange={(e) => {
+                      const type = e.target.value as 'tray' | 'conduit';
+                      setManualSpareType(type);
+                      setManualSpareStandardId('');
+                    }}
+                    className="bg-white dark:bg-[#141414] border border-black/5 dark:border-white/10 p-1.5 text-[10px] outline-none dark:text-white"
+                  >
+                    <option value="conduit">{t.nav.conduits}</option>
+                    <option value="tray">{t.nav.trays}</option>
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder={t.input.quantity}
+                    value={manualSpareQty}
+                    onChange={(e) => setManualSpareQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="bg-white dark:bg-[#141414] border border-black/5 dark:border-white/10 p-1.5 text-[10px] font-mono outline-none dark:text-white"
+                  />
+                </div>
+                <select
+                  value={manualSpareStandardId}
+                  onChange={(e) => setManualSpareStandardId(e.target.value)}
+                  className="w-full bg-white dark:bg-[#141414] border border-black/5 dark:border-white/10 p-1.5 text-[10px] font-bold outline-none dark:text-white"
+                >
+                  <option value="">{t.input.standardSize}</option>
+                  {customStructures
+                    .filter(Boolean)
+                    .filter(s => s?.type === manualSpareType)
+                    .sort((a, b) => {
+                      if (a.isFavorite && !b.isFavorite) return -1;
+                      if (!a.isFavorite && b.isFavorite) return 1;
+                      const numA = parseInt((a?.name || '').replace(/\D/g, ''), 10);
+                      const numB = parseInt((b?.name || '').replace(/\D/g, ''), 10);
+                      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+                      return (a?.name || '').localeCompare(b?.name || '');
+                    })
+                    .map(s => (
+                      <option key={s.id} value={s.id} className="dark:bg-[#141414]">{s.isFavorite ? '★ ' : ''}{s.name}</option>
+                    ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (!manualSpareName.trim() || !manualSpareStandardId) return;
+                    const std = customStructures.find(s => s.id === manualSpareStandardId);
+                    if (!std) return;
+                    addManualSpareStructure({
+                      name: manualSpareName.trim(),
+                      type: std.type,
+                      width: std.width,
+                      height: std.height,
+                      quantity: manualSpareQty,
+                    });
+                    setManualSpareName('');
+                    setManualSpareStandardId('');
+                  }}
+                  disabled={!manualSpareName.trim() || !manualSpareStandardId}
+                  className="w-full flex items-center justify-center gap-1 bg-[#81292C] text-white text-[10px] font-bold uppercase tracking-widest py-1.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Plus size={12} /> {t.input.addManualSpare}
+                </button>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-black/5 dark:border-white/5">
               <label className="block text-[10px] font-bold opacity-40 mb-2 tracking-widest uppercase">{t.input.addCable}</label>
               <div className="space-y-3">
                 <div className="flex gap-2">
@@ -959,9 +1074,9 @@ export const DashboardView = () => {
             <div className="flex-1 bg-[#efefef] dark:bg-[#0F0F0F] overflow-auto custom-scrollbar transition-colors flex flex-col">
               <div className="flex flex-wrap gap-x-12 gap-y-16 p-8 items-end justify-center w-full mx-auto min-h-full">
                 {packedStructures.map((packedStructure, idx) => (
-                  <StructurePreview 
+                  <StructurePreview
                     key={idx}
-                    structure={structure}
+                    structure={packedStructure.customStructure || structure}
                     cables={projectCables}
                     allCables={customCables}
                     packedCables={packedStructure.cables}
@@ -971,7 +1086,7 @@ export const DashboardView = () => {
                     allowedArea={calculationResults.allowedArea}
                     darkMode={darkMode}
                     zoom={previewZoom}
-                    onNameChange={(name) => setStructure(s => ({ ...s, name }))}
+                    onNameChange={packedStructure.customStructure ? undefined : (name) => setStructure(s => ({ ...s, name }))}
                     onCableClick={(idx) => {
                       if (!projectCables[idx]) return;
                       const colors = ['#81292C', '#00B4D8', '#FFBE0B', '#8338EC', '#00C49A', '#401318'];

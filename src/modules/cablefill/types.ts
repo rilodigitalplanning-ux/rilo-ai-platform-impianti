@@ -32,6 +32,21 @@ export interface StandardStructure {
   isFavorite?: boolean;
 }
 
+/**
+ * Riserva/cavidotto vuoto aggiunto manualmente, con dimensione e nome propri
+ * (es. "Riserva Dati", "Riserva Emergenza"), indipendenti dalla struttura
+ * principale del progetto. Diverso da `Structure.spareTubes`, che aggiunge
+ * riserve vuote della STESSA dimensione della struttura principale.
+ */
+export interface ManualSpareStructure {
+  id: string;
+  name: string;
+  type: 'tray' | 'conduit';
+  width: number; // mm
+  height: number; // mm
+  quantity: number;
+}
+
 export interface ProjectCable {
   id: string;
   cable: Cable;
@@ -49,6 +64,8 @@ export interface Project {
   notes?: string;
   /** Progetto "ombrello" a cui appartiene questa struttura (es. "LA SUVERA"). */
   groupId?: string;
+  /** Cavidotti/passerelle di riserva aggiunti manualmente con misura e nome propri. */
+  manualSpareStructures?: ManualSpareStructure[];
 }
 
 /**
@@ -191,6 +208,9 @@ export interface Translation {
     editTag: string;
     hasSeparator: string;
     spareTubes: string;
+    manualSpares: string;
+    spareNamePlaceholder: string;
+    addManualSpare: string;
     mixedSystemsWarning: string;
     conduitMixedWarning: string;
     separatorRequiredWarning: string;
