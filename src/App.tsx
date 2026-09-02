@@ -5,6 +5,7 @@ import { CableFillApp } from './modules/cablefill/CableFillApp';
 import { LoadAnalysisApp } from './modules/load-analysis/LoadAnalysisApp';
 import { PanelScheduleApp } from './modules/panel-schedule/PanelScheduleApp';
 import { CMEEditorApp } from './modules/cme-editor/CMEEditorApp';
+import { PdfDxfApp } from './modules/pdf-dxf/PdfDxfApp';
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
         <Route path="/load-analysis/*" element={<LoadAnalysisApp />} />
         <Route path="/panel-schedule/*" element={<PanelScheduleApp />} />
         <Route path="/cme-editor/*" element={<CMEEditorApp />} />
+        <Route path="/pdf-dxf/*" element={<PdfDxfApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench } from 'lucide-react';
+import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench, FileCode2 } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 const MODULES = [
@@ -52,6 +52,18 @@ const MODULES = [
     accent: '#6c63ff',
     primary: '#2b2d42',
     tags: ['Elenco Prezzi', 'Pulizia Excel', 'Primus', 'Export'],
+  },
+  {
+    id: 'pdf-dxf',
+    route: '/pdf-dxf',
+    name: 'PDF → DXF',
+    tagline: 'Conversione di disegni vettoriali in DXF',
+    description:
+      'Carica un PDF con tracciati vettoriali (es. esportato da un CAD) e ottieni un file DXF pronto per AutoCAD, con layer e colori preservati.',
+    icon: FileCode2,
+    accent: '#d97e1c',
+    primary: '#4a3416',
+    tags: ['Import PDF', 'Export DXF', 'CAD', 'Vettoriale'],
   },
 ] as const;
 
