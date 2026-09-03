@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Upload, FileCode2, Loader2, Download, CheckCircle2, AlertTriangle, Layers } from 'lucide-react';
+import { Upload, FileCode2, Loader2, Download, CheckCircle2, AlertTriangle, Layers, Scan } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { convertPdfToDxf } from '../../utils/pdfToDxf';
 import { saveFileWithPicker } from '@/utils/fileSave';
@@ -15,6 +15,8 @@ export const PdfDxfView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [planScale, setPlanScale] = useState(1);
+  const [minSizeMm, setMinSizeMm] = useState(0);
 
   const handleFileSelected = async (fileList: FileList | null) => {
     const file = fileList?.[0];
@@ -23,7 +25,7 @@ export const PdfDxfView: React.FC = () => {
     setError(null);
     setProgress('Avvio conversione...');
     try {
-      const converted = await convertPdfToDxf(file, setProgress);
+      const converted = await convertPdfToDxf(file, setProgress, { planScale, minSizeMm });
       setResult(converted);
       showToast(`${converted.stats.entities} entità estratte con successo!`, 'success');
     } catch (e: any) {
@@ -128,7 +130,7 @@ export const PdfDxfView: React.FC = () => {
                       <>
                         <Upload size={28} className="mx-auto opacity-30 dark:text-white mb-2" />
                         <p className="text-[11px] font-bold dark:text-white opacity-60">Clic per selezionare il file</p>
-                        <p className="text-[9px] opacity-30 dark:text-white/30 mt-1">Disegno PDF con tracciati vettoriali (es. esportato da un CAD)</p>
+                        <p className="text-[9px] opacity-30 dark:text-white/30 mt-1">Disegno PDF vettoriale o scansionato</p>
                       </>
                     )}
                   </div>
@@ -139,6 +141,46 @@ export const PdfDxfView: React.FC = () => {
                     </div>
                   )}
                 </section>
+
+                <section className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-8 rounded-3xl premium-shadow space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${moduleTheme.accent}20` }}>
+                      <Scan size={20} style={{ color: moduleTheme.accent }} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black dark:text-white uppercase tracking-tight">Opzioni PDF scansionato</h3>
+                      <p className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Usate solo se il PDF non ha vettori</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40">
+                      Scala della planimetria (es. 100 per "1:100")
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step="any"
+                      value={planScale}
+                      onChange={e => setPlanScale(Math.max(0.001, parseFloat(e.target.value) || 1))}
+                      className="w-full bg-[#efefef] dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold dark:text-white outline-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40">
+                      Filtro dimensione minima (mm) — opzionale
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={minSizeMm}
+                      onChange={e => setMinSizeMm(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full bg-[#efefef] dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-4 py-2 text-[11px] font-bold dark:text-white outline-none"
+                    />
+                    <p className="text-[9px] opacity-40 dark:text-white/40">
+                      0 = trace completo (più fedele, poi ripulisci simboli/testo indesiderati nel CAD). Un valore &gt; 0 scarta i tracciati più piccoli (utile per rimuovere simboli/testo automaticamente, ma può tagliare dettagli validi).
+                    </p>
+                  </div>
+                </section>
               </div>
 
               {/* Info */}
@@ -148,15 +190,15 @@ export const PdfDxfView: React.FC = () => {
                   <ol className="space-y-4 text-[11px] dark:text-white/70">
                     <li className="flex gap-3">
                       <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: moduleTheme.accent }}>1</span>
-                      Legge i tracciati vettoriali (linee, curve, rettangoli) direttamente dal contenuto del PDF — non è una scansione/OCR.
+                      Prova prima a leggere i tracciati vettoriali (linee, curve, rettangoli) direttamente dal contenuto del PDF — il metodo più fedele, per PDF esportati da un CAD.
                     </li>
                     <li className="flex gap-3">
                       <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: moduleTheme.accent }}>2</span>
-                      Converte ogni tracciato in entità LINE (le curve vengono approssimate con piccoli segmenti).
+                      Se una pagina non ha vettori (PDF scansionato/plottato come immagine), la renderizza ad alta risoluzione (300 DPI) e la vettorizza con <strong>Potrace</strong> — lo stesso motore di vettorizzazione bitmap→vettore usato professionalmente, non un tracciamento improvvisato.
                     </li>
                     <li className="flex gap-3">
                       <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: moduleTheme.accent }}>3</span>
-                      Mantiene i colori dei tracciati (mappati sui colori standard AutoCAD) e organizza più pagine in layer separati.
+                      Calibra la scala reale in mm usando la scala impostata qui sopra, converte ogni tracciato in entità LINE e organizza più pagine in layer separati.
                     </li>
                     <li className="flex gap-3">
                       <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: moduleTheme.accent }}>4</span>
@@ -164,11 +206,11 @@ export const PdfDxfView: React.FC = () => {
                     </li>
                   </ol>
                   <div className="mt-6 p-3 rounded-lg bg-black/5 dark:bg-white/5">
-                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-1">Limite importante</p>
+                    <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-1">Limite importante (fallback raster)</p>
                     <p className="text-[10px] dark:text-white/60">
-                      Funziona solo con PDF che contengono <strong>tracciati vettoriali</strong> (es. esportati da AutoCAD, Revit o simili).
-                      Un PDF <strong>scansionato</strong> (immagine/foto di un disegno) non contiene geometria da estrarre e non produrrà risultati utili.
-                      Il testo del disegno (quote, etichette) non viene convertito — solo la geometria delle linee.
+                      Su un PDF scansionato, Potrace traccia <strong>tutto</strong> ciò che è scuro nell'immagine — pareti, porte, simboli, testo (come contorno) — senza distinguerli tra loro: non c'è modo di saperlo a partire dai soli pixel, essendo tutto sullo stesso layer.
+                      Il "trace completo" (filtro a 0) è il più fedele: ripulisci manualmente simboli/testo indesiderati nel CAD dopo l'importazione. Il filtro dimensione minima automatizza questa pulizia, ma è un'euristica — rischia di scartare dettagli piccoli ma validi (es. archi porta).
+                      Verifica sempre la scala: la dimensione finale del disegno (mostrata dopo la conversione) deve essere plausibile per un edificio reale.
                     </p>
                   </div>
                 </section>
@@ -199,6 +241,13 @@ export const PdfDxfView: React.FC = () => {
                 <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
                   Conversione completata su "{result.stats.fileName}". Esporta il DXF per aprirlo nel tuo software CAD.
                 </p>
+                <span className="ml-auto shrink-0 px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+                  {result.stats.vectorPages > 0 && result.stats.rasterPages > 0
+                    ? `${result.stats.vectorPages} vettoriale + ${result.stats.rasterPages} raster`
+                    : result.stats.rasterPages > 0
+                      ? `${result.stats.rasterPages} pag. raster (Potrace)`
+                      : `${result.stats.vectorPages} pag. vettoriale`}
+                </span>
               </div>
 
               {result.stats.warnings.length > 0 && (

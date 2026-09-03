@@ -37,10 +37,20 @@ export function buildDxf(segments: DxfSegment[]): string {
     lines.push(String(code), String(value));
   };
 
-  const xs = segments.flatMap(s => [s.x1, s.x2]);
-  const ys = segments.flatMap(s => [s.y1, s.y2]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  // Calcolate con un ciclo (non Math.min/max(...array)): con migliaia di
+  // segmenti lo spread operator supera il limite di argomenti dello stack
+  // della funzione e genera "Maximum call stack size exceeded".
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const s of segments) {
+    if (s.x1 < minX) minX = s.x1;
+    if (s.x2 < minX) minX = s.x2;
+    if (s.x1 > maxX) maxX = s.x1;
+    if (s.x2 > maxX) maxX = s.x2;
+    if (s.y1 < minY) minY = s.y1;
+    if (s.y2 < minY) minY = s.y2;
+    if (s.y1 > maxY) maxY = s.y1;
+    if (s.y2 > maxY) maxY = s.y2;
+  }
 
   // ── HEADER ──
   add(0, 'SECTION');
