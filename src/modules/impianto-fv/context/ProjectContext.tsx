@@ -91,7 +91,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addNewProject = () => {
-    const blank = makeBlankProject();
+    const blank = { ...makeBlankProject(), name: `NUOVO PROGETTO ${projects.length + 1}` };
     setProjects(prev => [...prev, blank]);
     setActiveProjectId(blank.id);
   };

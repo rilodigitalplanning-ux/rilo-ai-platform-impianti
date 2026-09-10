@@ -111,12 +111,19 @@ export const DcCableView: React.FC = () => {
           <div className="flex items-center justify-between bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl px-6 py-3">
             <div className="flex items-center gap-3 min-w-0">
               <FolderInput size={16} style={{ color: moduleTheme.accent }} className="shrink-0" />
-              <input
-                type="text"
-                value={activeProject.name}
-                onChange={e => renameProject(activeProject.id, e.target.value.toUpperCase())}
-                className="bg-transparent text-[12px] font-black uppercase tracking-tight dark:text-white outline-none border-b border-transparent hover:border-black/20 dark:hover:border-white/20 focus:border-black/50 dark:focus:border-white/50 transition-colors min-w-0 w-64"
-              />
+              <div className="min-w-0">
+                <label className="block text-[8px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-0.5">
+                  Nome progetto
+                </label>
+                <input
+                  type="text"
+                  value={activeProject.name}
+                  onChange={e => renameProject(activeProject.id, e.target.value.toUpperCase())}
+                  placeholder="NOME DEL PROGETTO"
+                  className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg px-3 py-1.5 text-[12px] font-black uppercase tracking-tight text-black dark:text-white outline-none focus:ring-2 transition-all min-w-0 w-64"
+                  style={{ ['--tw-ring-color' as any]: moduleTheme.accent }}
+                />
+              </div>
               <span className="text-[9px] opacity-40 dark:text-white/40 shrink-0">
                 {activeProject.calculations.length} calcol{activeProject.calculations.length === 1 ? 'o' : 'i'}
               </span>
