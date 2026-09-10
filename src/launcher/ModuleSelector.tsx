@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench, FileCode2 } from 'lucide-react';
+import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench, FileCode2, SunMedium } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 const MODULES = [
@@ -64,6 +64,18 @@ const MODULES = [
     accent: '#d97e1c',
     primary: '#4a3416',
     tags: ['Import PDF', 'Export DXF', 'CAD', 'Vettoriale'],
+  },
+  {
+    id: 'impianto-fv',
+    route: '/impianto-fv',
+    name: 'Impianto FV',
+    tagline: 'Verifiche di progetto per impianti fotovoltaici',
+    description:
+      'Dimensiona il cavo lato DC di stringa in base alla caduta di tensione ammessa, con arrotondamento alla sezione commerciale.',
+    icon: SunMedium,
+    accent: '#f2b705',
+    primary: '#4a3b0f',
+    tags: ['Fotovoltaico', 'Cavo DC', 'Caduta di Tensione', 'Dimensionamento'],
   },
 ] as const;
 

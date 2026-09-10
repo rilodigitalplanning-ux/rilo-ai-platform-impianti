@@ -6,6 +6,7 @@ import { LoadAnalysisApp } from './modules/load-analysis/LoadAnalysisApp';
 import { PanelScheduleApp } from './modules/panel-schedule/PanelScheduleApp';
 import { CMEEditorApp } from './modules/cme-editor/CMEEditorApp';
 import { PdfDxfApp } from './modules/pdf-dxf/PdfDxfApp';
+import { ImpiantoFvApp } from './modules/impianto-fv/ImpiantoFvApp';
 
 export function App() {
   return (
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/panel-schedule/*" element={<PanelScheduleApp />} />
         <Route path="/cme-editor/*" element={<CMEEditorApp />} />
         <Route path="/pdf-dxf/*" element={<PdfDxfApp />} />
+        <Route path="/impianto-fv/*" element={<ImpiantoFvApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
