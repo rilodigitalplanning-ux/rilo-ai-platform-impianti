@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
-import { ChevronLeft, Sun, SunMedium, Moon, LogOut } from 'lucide-react';
+import { ChevronLeft, Sun, Moon, LogOut, Boxes } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
 import { Toast } from '../Toast';
 import { Logo } from '@/components/Logo';
@@ -47,7 +47,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   })();
 
   const tabs: { id: AppTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'dc-cable', label: 'Cavo DC Stringa', icon: <SunMedium size={18} /> },
+    { id: 'string-config', label: 'Inverter & Stringa', icon: <Boxes size={18} /> },
   ];
 
   return (
@@ -129,7 +129,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               className="w-7 h-7 rounded flex items-center justify-center shadow-sm"
               style={{ backgroundColor: moduleTheme.accent }}
             >
-              <SunMedium size={14} className="text-white" />
+              <Boxes size={14} className="text-white" />
             </div>
             <div>
               <p className="text-[9px] font-bold opacity-40 uppercase tracking-widest dark:text-white/40">

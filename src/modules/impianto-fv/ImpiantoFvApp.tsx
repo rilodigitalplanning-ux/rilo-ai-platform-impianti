@@ -2,12 +2,12 @@ import React from 'react';
 import { AppProvider } from './context/AppContext';
 import { ProjectProvider } from './context/ProjectContext';
 import { MainLayout } from './components/layout/MainLayout';
-import { DcCableView } from './components/views/DcCableView';
+import { StringConfigView } from './components/views/StringConfigView';
 
 function ImpiantoFvInner() {
   return (
     <MainLayout>
-      <DcCableView />
+      <StringConfigView />
     </MainLayout>
   );
 }

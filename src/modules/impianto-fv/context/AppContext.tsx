@@ -7,7 +7,7 @@ interface Toast {
   type: 'success' | 'error';
 }
 
-export type AppTab = 'dc-cable';
+export type AppTab = 'string-config';
 
 interface AppContextType {
   darkMode: boolean;
@@ -24,7 +24,7 @@ const AppContext = createContext<AppContextType | null>(null);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [darkMode, setDarkModeState] = useState(getSystemPrefersDark);
   const [toastData, setToastData] = useState<Toast | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('dc-cable');
+  const [activeTab, setActiveTab] = useState<AppTab>('string-config');
 
   const moduleTheme = useMemo(() => getModuleTheme('impianto-fv'), []);
 
