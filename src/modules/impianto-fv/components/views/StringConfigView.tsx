@@ -1,34 +1,36 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   Zap, PanelsTopLeft, Plus, Pencil, Trash2, CheckCircle2, XCircle, ListPlus, Tag,
-  FolderInput, Save, FolderOpen,
+  FileDown, Layers,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useProject } from '../../context/ProjectContext';
 import type { InverterSpec, PanelSpec, StringConfig } from '../../context/ProjectContext';
-import { checkAndSizeString } from '../../utils/pvStringCalc';
+import { checkAndSizeString, calculateFdi } from '../../utils/pvStringCalc';
 import { CABLE_TYPES, STANDARD_SECTIONS, ampacityForSection } from '../../utils/dcCableCalc';
 import { parseLocaleFloat, parseLocaleInt, selectAllOnFocus } from '../../utils/numberInput';
+import { exportStringReportPdf } from '../../utils/pdfExport';
+import { PvArrayDiagram } from '../PvArrayDiagram';
+import { SystemPreviewModal } from '../SystemPreviewModal';
 
 // I campi numerici dei form restano stringhe finché l'utente digita (vedi nota
 // più sotto su perché) — vengono convertiti in numeri solo al salvataggio.
 // Vuoti di default: niente valori di esempio precompilati.
-const blankInverterForm = { name: '', ratedPowerKw: '', mpptVoltageMinV: '', mpptVoltageMaxV: '', mpptMaxCurrentA: '' };
-const blankPanelForm = { name: '', pMaxW: '', vmp: '', voc: '', impp: '', isc: '', tempCoeffVocPctPerC: '' };
+const blankInverterForm = { name: '', ratedPowerKw: '', mpptVoltageMinV: '', mpptVoltageMaxV: '', mpptMaxCurrentA: '', numMppt: '1' };
+const blankPanelForm = { name: '', pMaxW: '', vmp: '', voc: '', impp: '', isc: '', tempCoeffVocPctPerC: '', tempCoeffPmaxPctPerC: '', maxReverseCurrentA: '' };
 
 export const StringConfigView: React.FC = () => {
   const { moduleTheme, showToast } = useApp();
   const {
-    activeProject, addNewProject, renameProject,
-    savedProjects, isLoadingSaved, refreshSavedProjects, loadProject, deleteSavedProject, saveProject,
+    activeProject,
     catalogInverters, catalogPanels,
     addInverter, updateInverter, removeInverter,
     addPanel, updatePanel, removePanel,
     addStringConfig, updateStringConfig, removeStringConfig,
   } = useProject();
 
-  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
+  const [isSystemPreviewOpen, setIsSystemPreviewOpen] = useState(false);
   const [showInverterForm, setShowInverterForm] = useState(false);
   const [editingInverterId, setEditingInverterId] = useState<string | null>(null);
   const [inverterForm, setInverterForm] = useState(blankInverterForm);
@@ -40,6 +42,7 @@ export const StringConfigView: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [stringName, setStringName] = useState('');
   const [inverterId, setInverterId] = useState<string>('');
+  const [mpptIndex, setMpptIndex] = useState('1');
   const [panelId, setPanelId] = useState<string>('');
   // Campi numerici tenuti come stringa mentre si digita (vedi nota sopra su blankInverterForm).
   const [panelsInSeries, setPanelsInSeries] = useState('12');
@@ -47,9 +50,10 @@ export const StringConfigView: React.FC = () => {
   const [tMinC, setTMinC] = useState('-10');
   const [tMaxC, setTMaxC] = useState('70');
   const [cableLengthM, setCableLengthM] = useState('50');
-  const [deltaVPercent, setDeltaVPercent] = useState('1');
+  const [deltaVPercent, setDeltaVPercent] = useState('3');
   const [cableTypeId, setCableTypeId] = useState(CABLE_TYPES[0].id);
   const [selectedSection, setSelectedSection] = useState<number | null>(null);
+  const stringFormRef = useRef<HTMLDivElement>(null);
 
   const cableType = CABLE_TYPES.find(c => c.id === cableTypeId) ?? CABLE_TYPES[0];
   const inverter = catalogInverters.find(i => i.id === inverterId) ?? null;
@@ -69,6 +73,45 @@ export const StringConfigView: React.FC = () => {
     }, cableType);
   }, [inverter, panel, panelsInSeries, stringsInParallel, tMinC, tMaxC, cableLengthM, deltaVPercent, cableType]);
 
+  const fdi = useMemo(() => {
+    if (!inverter) return null;
+    const panelsById: Record<string, PanelSpec> = Object.fromEntries(catalogPanels.map(p => [p.id, p]));
+    const stringsOnThisInverter = activeProject.stringConfigs.filter(s => s.inverterId === inverter.id);
+    return calculateFdi(inverter, stringsOnThisInverter, panelsById);
+  }, [inverter, catalogPanels, activeProject.stringConfigs]);
+
+  const mpptIndexN = parseLocaleInt(mpptIndex, 1);
+  const mpptConflict = useMemo(() => {
+    if (!inverter) return null;
+    return activeProject.stringConfigs.find(s =>
+      s.inverterId === inverter.id &&
+      (s.mpptIndex ?? 1) === mpptIndexN &&
+      s.id !== editingId
+    ) ?? null;
+  }, [inverter, activeProject.stringConfigs, mpptIndexN, editingId]);
+
+  // Nel dropdown si nascondono gli MPPT già occupati da un'altra stringa di
+  // questo inverter — resta comunque selezionabile l'MPPT della stringa in
+  // modifica (altrimenti sparirebbe dalle opzioni mentre la si modifica).
+  const usedMpptIndexes = useMemo(() => {
+    if (!inverter) return new Set<number>();
+    return new Set(
+      activeProject.stringConfigs
+        .filter(s => s.inverterId === inverter.id && s.id !== editingId)
+        .map(s => s.mpptIndex ?? 1)
+    );
+  }, [inverter, activeProject.stringConfigs, editingId]);
+
+  // usedMpptIndexes esclude già la stringa in modifica (s.id !== editingId),
+  // quindi il suo MPPT resta disponibile automaticamente — nessuna eccezione
+  // aggiuntiva serve qui (altrimenti si rischia di riammettere un MPPT
+  // davvero in conflitto solo perché coincide col valore corrente del form).
+  const availableMpptOptions = useMemo(() => {
+    if (!inverter) return [];
+    return Array.from({ length: inverter.numMppt ?? 1 }, (_, i) => i + 1)
+      .filter(n => !usedMpptIndexes.has(n));
+  }, [inverter, usedMpptIndexes]);
+
   const recommendedSection = check?.cable.sCommercialMm2 ?? null;
   const chosenSection = selectedSection ?? recommendedSection;
   const chosenIz = chosenSection ? ampacityForSection(cableType, chosenSection) : null;
@@ -81,6 +124,7 @@ export const StringConfigView: React.FC = () => {
       mpptVoltageMinV: String(inv.mpptVoltageMinV),
       mpptVoltageMaxV: String(inv.mpptVoltageMaxV),
       mpptMaxCurrentA: String(inv.mpptMaxCurrentA),
+      numMppt: String(inv.numMppt ?? 1),
     });
     setShowInverterForm(true);
   };
@@ -93,6 +137,7 @@ export const StringConfigView: React.FC = () => {
       mpptVoltageMinV: parseLocaleFloat(inverterForm.mpptVoltageMinV, 0),
       mpptVoltageMaxV: parseLocaleFloat(inverterForm.mpptVoltageMaxV, 0),
       mpptMaxCurrentA: parseLocaleFloat(inverterForm.mpptMaxCurrentA, 0),
+      numMppt: Math.max(1, parseLocaleInt(inverterForm.numMppt, 1)),
     };
     if (editingInverterId) {
       updateInverter(editingInverterId, payload);
@@ -116,6 +161,8 @@ export const StringConfigView: React.FC = () => {
       impp: String(p.impp),
       isc: String(p.isc),
       tempCoeffVocPctPerC: String(p.tempCoeffVocPctPerC),
+      tempCoeffPmaxPctPerC: p.tempCoeffPmaxPctPerC != null ? String(p.tempCoeffPmaxPctPerC) : '',
+      maxReverseCurrentA: p.maxReverseCurrentA != null ? String(p.maxReverseCurrentA) : '',
     });
     setShowPanelForm(true);
   };
@@ -130,6 +177,8 @@ export const StringConfigView: React.FC = () => {
       impp: parseLocaleFloat(panelForm.impp, 0),
       isc: parseLocaleFloat(panelForm.isc, 0),
       tempCoeffVocPctPerC: parseLocaleFloat(panelForm.tempCoeffVocPctPerC, 0),
+      tempCoeffPmaxPctPerC: panelForm.tempCoeffPmaxPctPerC.trim() === '' ? undefined : parseLocaleFloat(panelForm.tempCoeffPmaxPctPerC, 0),
+      maxReverseCurrentA: panelForm.maxReverseCurrentA.trim() === '' ? undefined : parseLocaleFloat(panelForm.maxReverseCurrentA, 0),
     };
     if (editingPanelId) {
       updatePanel(editingPanelId, payload);
@@ -146,12 +195,13 @@ export const StringConfigView: React.FC = () => {
   const resetForm = () => {
     setEditingId(null);
     setStringName('');
+    setMpptIndex('1');
     setPanelsInSeries('12');
     setStringsInParallel('1');
     setTMinC('-10');
     setTMaxC('70');
     setCableLengthM('50');
-    setDeltaVPercent('1');
+    setDeltaVPercent('3');
     setSelectedSection(null);
   };
 
@@ -159,6 +209,7 @@ export const StringConfigView: React.FC = () => {
     setEditingId(cfg.id);
     setStringName(cfg.name);
     setInverterId(cfg.inverterId);
+    setMpptIndex(String(cfg.mpptIndex ?? 1));
     setPanelId(cfg.panelId);
     setPanelsInSeries(String(cfg.panelsInSeries));
     setStringsInParallel(String(cfg.stringsInParallel));
@@ -168,19 +219,24 @@ export const StringConfigView: React.FC = () => {
     setDeltaVPercent(String(cfg.deltaVPercent));
     setCableTypeId(cfg.cableTypeId);
     setSelectedSection(cfg.selectedSectionMm2);
+    stringFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleSaveConfig = () => {
     if (!inverter || !panel || !chosenSection) return;
+    if (mpptConflict) {
+      showToast(`MPPT ${mpptIndex} già usato dalla stringa "${mpptConflict.name}" su questo inverter.`, 'error');
+      return;
+    }
     const payload = {
       name: stringName || `Stringa ${activeProject.stringConfigs.length + 1}`,
-      inverterId: inverter.id, panelId: panel.id,
+      inverterId: inverter.id, mpptIndex: parseLocaleInt(mpptIndex, 1), panelId: panel.id,
       panelsInSeries: parseLocaleInt(panelsInSeries, 1),
       stringsInParallel: parseLocaleInt(stringsInParallel, 1),
       tMinC: parseLocaleFloat(tMinC, 0),
       tMaxC: parseLocaleFloat(tMaxC, 0),
       cableLengthM: parseLocaleFloat(cableLengthM, 0),
-      deltaVPercent: parseLocaleFloat(deltaVPercent, 1),
+      deltaVPercent: parseLocaleFloat(deltaVPercent, 3),
       cableTypeId,
       selectedSectionMm2: chosenSection,
     };
@@ -194,9 +250,11 @@ export const StringConfigView: React.FC = () => {
     resetForm();
   };
 
-  // Passando a un altro progetto, l'inverter/pannello selezionati (id validi
-  // solo nel progetto precedente) e il form vanno azzerati.
-  const resetSelections = () => {
+  // Passando a un altro progetto (creato o caricato dalla sidebar), l'inverter/
+  // pannello selezionati (id validi solo nel progetto precedente) e il form
+  // vanno azzerati — la barra progetti ora vive nella sidebar (MainLayout),
+  // quindi si intercetta il cambio osservando l'id del progetto attivo.
+  useEffect(() => {
     setInverterId('');
     setPanelId('');
     setShowInverterForm(false);
@@ -204,12 +262,30 @@ export const StringConfigView: React.FC = () => {
     setShowPanelForm(false);
     setEditingPanelId(null);
     resetForm();
-  };
-
-  useEffect(() => {
-    refreshSavedProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeProject.id]);
+
+  // Se l'MPPT selezionato non è (più) disponibile per questo inverter
+  // (cambio inverter, o quello scelto è stato appena occupato), passa
+  // automaticamente al primo MPPT libero.
+  useEffect(() => {
+    if (availableMpptOptions.length > 0 && !availableMpptOptions.includes(mpptIndexN)) {
+      setMpptIndex(String(availableMpptOptions[0]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inverter?.id, availableMpptOptions.join(',')]);
+
+  const handleExportPdf = async () => {
+    if (activeProject.stringConfigs.length === 0) {
+      showToast('Aggiungi almeno una stringa al progetto prima di esportare il report.', 'error');
+      return;
+    }
+    try {
+      await exportStringReportPdf(activeProject, catalogInverters, catalogPanels);
+    } catch (e: any) {
+      showToast(`Errore nell'esportazione del PDF: ${e?.message || e}`, 'error');
+    }
+  };
 
   const inputCls = "w-full bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl px-3 py-2 text-[11px] font-bold dark:text-white outline-none";
   const labelCls = "text-[9px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40";
@@ -224,80 +300,6 @@ export const StringConfigView: React.FC = () => {
     >
       <div className="flex-1 p-8 overflow-y-auto custom-scrollbar">
         <div className="max-w-6xl mx-auto space-y-8">
-
-          {/* Project Hub */}
-          <div className="flex items-center justify-between bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl px-6 py-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <FolderInput size={16} style={{ color: moduleTheme.accent }} className="shrink-0" />
-              <div className="min-w-0">
-                <label className="block text-[8px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-0.5">
-                  Nome progetto
-                </label>
-                <input
-                  type="text"
-                  value={activeProject.name}
-                  onChange={e => renameProject(activeProject.id, e.target.value.toUpperCase())}
-                  placeholder="NOME DEL PROGETTO"
-                  className="bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg px-3 py-1.5 text-[12px] font-black uppercase tracking-tight text-black dark:text-white outline-none focus:ring-2 transition-all min-w-0 w-64"
-                  style={{ ['--tw-ring-color' as any]: moduleTheme.accent }}
-                />
-              </div>
-              <span className="text-[9px] opacity-40 dark:text-white/40 shrink-0">
-                {activeProject.stringConfigs.length} string{activeProject.stringConfigs.length === 1 ? 'a' : 'he'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => { addNewProject(); resetSelections(); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
-              >
-                <Plus size={12} /> Nuovo
-              </button>
-              <button
-                onClick={() => { setIsBrowseOpen(o => !o); if (!isBrowseOpen) refreshSavedProjects(); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
-              >
-                <FolderOpen size={12} /> Progetti salvati
-              </button>
-              <button
-                onClick={() => saveProject(showToast)}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white transition-all"
-                style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
-              >
-                <Save size={12} /> Salva progetto
-              </button>
-            </div>
-          </div>
-
-          {isBrowseOpen && (
-            <div className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-2xl p-4 space-y-2">
-              <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 dark:text-white/40 mb-2">
-                {isLoadingSaved ? 'Caricamento...' : `${savedProjects.length} progetto/i salvato/i`}
-              </p>
-              {savedProjects.length === 0 && !isLoadingSaved && (
-                <p className="text-[10px] opacity-40 dark:text-white/40">Nessun progetto salvato ancora.</p>
-              )}
-              {savedProjects.map(p => (
-                <div key={p.id} className="flex items-center justify-between gap-2 bg-black/5 dark:bg-white/5 rounded-xl px-4 py-2.5">
-                  <button
-                    onClick={() => { loadProject(p); setIsBrowseOpen(false); resetSelections(); }}
-                    className="flex-1 text-left min-w-0"
-                  >
-                    <p className="text-[11px] font-bold dark:text-white truncate">{p.name}</p>
-                    <p className="text-[9px] opacity-40 dark:text-white/40">
-                      {p.stringConfigs.length} stringhe · {p.lastSaved}
-                    </p>
-                  </button>
-                  <button
-                    onClick={() => deleteSavedProject(p.id, showToast)}
-                    className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="space-y-6">
 
@@ -330,11 +332,19 @@ export const StringConfigView: React.FC = () => {
                 )}
                 {inverter && (
                   <div className="flex items-center justify-between text-[9px] opacity-60 dark:text-white/60 px-1">
-                    <span>MPPT {inverter.mpptVoltageMinV}–{inverter.mpptVoltageMaxV} V · {inverter.mpptMaxCurrentA} A max</span>
+                    <span>MPPT {inverter.mpptVoltageMinV}–{inverter.mpptVoltageMaxV} V · {inverter.mpptMaxCurrentA} A max · {inverter.numMppt ?? 1} MPPT</span>
                     <div className="flex items-center gap-2 shrink-0">
                       <button onClick={() => startEditInverter(inverter)} className="opacity-70 hover:opacity-100"><Pencil size={12} /></button>
                       <button onClick={() => { removeInverter(inverter.id); setInverterId(''); }} className="text-red-500"><Trash2 size={12} /></button>
                     </div>
+                  </div>
+                )}
+                {fdi && (
+                  <div className={`flex items-center justify-between text-[9px] px-3 py-2 rounded-xl border ${fdi.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
+                    <span className="font-bold uppercase tracking-widest opacity-60">FDI (P_AC / ΣP_DC su questo inverter)</span>
+                    <span className={`font-black ${fdi.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                      {fdi.fdi.toFixed(2)} {!fdi.ok && '⚠'}
+                    </span>
                   </div>
                 )}
 
@@ -361,6 +371,11 @@ export const StringConfigView: React.FC = () => {
                         <label className={labelCls}>V max MPPT (V)</label>
                         <input type="text" inputMode="decimal" value={inverterForm.mpptVoltageMaxV} onFocus={selectAllOnFocus}
                           onChange={e => setInverterForm(f => ({ ...f, mpptVoltageMaxV: e.target.value }))} className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>N. MPPT indipendenti</label>
+                        <input type="text" inputMode="numeric" value={inverterForm.numMppt} onFocus={selectAllOnFocus}
+                          onChange={e => setInverterForm(f => ({ ...f, numMppt: e.target.value }))} className={inputCls} />
                       </div>
                     </div>
                     <button onClick={handleSaveInverter} className="w-full py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white" style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}>
@@ -397,7 +412,7 @@ export const StringConfigView: React.FC = () => {
                 )}
                 {panel && (
                   <div className="flex items-center justify-between text-[9px] opacity-60 dark:text-white/60 px-1">
-                    <span>Vmp {panel.vmp}V · Voc {panel.voc}V · Isc {panel.isc}A · β {panel.tempCoeffVocPctPerC}%/°C</span>
+                    <span>Vmp {panel.vmp}V · Voc {panel.voc}V · Isc {panel.isc}A · β {panel.tempCoeffVocPctPerC}%/°C · γ {panel.tempCoeffPmaxPctPerC ?? panel.tempCoeffVocPctPerC}%/°C</span>
                     <div className="flex items-center gap-2 shrink-0">
                       <button onClick={() => startEditPanel(panel)} className="opacity-70 hover:opacity-100"><Pencil size={12} /></button>
                       <button onClick={() => { removePanel(panel.id); setPanelId(''); }} className="text-red-500"><Trash2 size={12} /></button>
@@ -439,6 +454,16 @@ export const StringConfigView: React.FC = () => {
                         <input type="text" inputMode="decimal" value={panelForm.tempCoeffVocPctPerC} onFocus={selectAllOnFocus}
                           onChange={e => setPanelForm(f => ({ ...f, tempCoeffVocPctPerC: e.target.value }))} className={inputCls} />
                       </div>
+                      <div>
+                        <label className={labelCls}>γ Pmax (%/°C)</label>
+                        <input type="text" inputMode="decimal" placeholder="= β se vuoto" value={panelForm.tempCoeffPmaxPctPerC} onFocus={selectAllOnFocus}
+                          onChange={e => setPanelForm(f => ({ ...f, tempCoeffPmaxPctPerC: e.target.value }))} className={`${inputCls} placeholder:font-normal placeholder:normal-case`} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>I max inversa (A)</label>
+                        <input type="text" inputMode="decimal" placeholder="= 2×Isc se vuoto" value={panelForm.maxReverseCurrentA} onFocus={selectAllOnFocus}
+                          onChange={e => setPanelForm(f => ({ ...f, maxReverseCurrentA: e.target.value }))} className={`${inputCls} placeholder:font-normal placeholder:normal-case`} />
+                      </div>
                     </div>
                     <button onClick={handleSavePanel} className="w-full py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white" style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}>
                       {editingPanelId ? 'Aggiorna pannello' : 'Salva pannello'}
@@ -448,14 +473,49 @@ export const StringConfigView: React.FC = () => {
               </section>
           </div>
 
-          {/* Configurazione stringa + Verifica, affiancati e simmetrici come Inverter/Pannello */}
-          <div className="grid grid-cols-2 gap-6">
-            <div>
+          {/* Configurazione stringa: larghezza piena (Inverter+Pannello insieme), risultato sotto */}
+          <div className="space-y-6">
+            <div ref={stringFormRef}>
               <section className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-6 rounded-3xl premium-shadow space-y-4">
-                <label className={`flex items-center gap-1.5 ${labelCls}`}><Tag size={11} /> Nome stringa</label>
-                <input value={stringName} onChange={e => setStringName(e.target.value)} placeholder="ES: STRINGA 01" className={`${inputCls} uppercase placeholder:normal-case placeholder:font-normal`} />
+                {editingId && (
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-dashed" style={{ borderColor: moduleTheme.accent, backgroundColor: `${moduleTheme.accent}1a` }}>
+                    <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest" style={{ color: moduleTheme.accent }}>
+                      <Pencil size={11} /> Modifica stringa in corso
+                    </span>
+                    <button onClick={resetForm} className="text-[9px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100 dark:text-white">
+                      Annulla
+                    </button>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className={`flex items-center gap-1.5 ${labelCls}`}><Tag size={11} /> Nome stringa</label>
+                    <input value={stringName} onChange={e => setStringName(e.target.value)} placeholder="ES: STRINGA 01" className={`${inputCls} uppercase placeholder:normal-case placeholder:font-normal`} />
+                  </div>
+                  {inverter && (
+                    <div>
+                      <label className={labelCls}>MPPT collegato</label>
+                      {availableMpptOptions.length > 0 ? (
+                        <select value={mpptIndex} onChange={e => setMpptIndex(e.target.value)} className={inputCls}>
+                          {availableMpptOptions.map(n => (
+                            <option key={n} value={n}>MPPT {n}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 py-2">
+                          ⚠ Tutti gli MPPT già assegnati.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {mpptConflict && (
+                  <p className="text-[9px] font-bold text-amber-600 dark:text-amber-400 -mt-2">
+                    ⚠ MPPT {mpptIndex} già usato dalla stringa "{mpptConflict.name}" — un MPPT accetta un solo gruppo di stringhe in parallelo.
+                  </p>
+                )}
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <label className={labelCls}>Pannelli in serie</label>
                     <input type="text" inputMode="numeric" min={1} value={panelsInSeries} onFocus={selectAllOnFocus}
@@ -478,14 +538,13 @@ export const StringConfigView: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label className={labelCls}>Tipo di cavo</label>
-                  <select value={cableTypeId} onChange={e => setCableTypeId(e.target.value)} className={`${inputCls} uppercase`}>
-                    {CABLE_TYPES.map(ct => <option key={ct.id} value={ct.id} className="normal-case">{ct.name}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className={labelCls}>Tipo di cavo</label>
+                    <select value={cableTypeId} onChange={e => setCableTypeId(e.target.value)} className={`${inputCls} uppercase`}>
+                      {CABLE_TYPES.map(ct => <option key={ct.id} value={ct.id} className="normal-case">{ct.name}</option>)}
+                    </select>
+                  </div>
                   <div>
                     <label className={labelCls}>Lunghezza cavo (m)</label>
                     <input type="text" inputMode="decimal" min={0} value={cableLengthM} onFocus={selectAllOnFocus}
@@ -497,11 +556,11 @@ export const StringConfigView: React.FC = () => {
                       onChange={e => setDeltaVPercent(e.target.value)} className={inputCls} />
                   </div>
                 </div>
-                <p className="text-[9px] opacity-40 dark:text-white/40">Default 1% — modificabile. Riferita alla Vmpp nominale di stringa a 25°C.</p>
+                <p className="text-[9px] opacity-40 dark:text-white/40">Default 3% — obbligo normativo (CEI 82-25 / Guida CEI 0-21), modificabile. Riferita alla Vmpp nominale di stringa a 25°C.</p>
               </section>
             </div>
 
-            {/* Result */}
+            {/* Result, sotto, larghezza piena */}
             <div>
               <section className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 p-6 rounded-3xl premium-shadow">
                 <div className="flex items-center justify-between mb-6 gap-3">
@@ -577,10 +636,60 @@ export const StringConfigView: React.FC = () => {
                           })}
                         </div>
                         <p className="text-[9px] opacity-50 dark:text-white/50">
-                          Con {chosenSection} mm²: ΔV cavo ≈ {check.deltaVoltsV.toFixed(2)} V ammessi · Iz cavo {chosenIz ?? '—'} A
+                          Con {chosenSection} mm²: ΔV cavo ≈ {check.deltaVoltsV.toFixed(2)} V ammessi · Iz cavo {chosenIz ?? '—'} A · Ib progetto {check.stringBox.ibA.toFixed(1)} A
                         </p>
                       </div>
                     )}
+
+                    <div>
+                      <p className={`${labelCls} mb-2`}>Quadro di campo (String Box)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className={`rounded-xl p-3 border ${check.stringBox.fuse.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                          <p className="text-[8px] font-bold uppercase tracking-widest opacity-50">Fusibile di stringa {!check.stringBox.fuse.required && '(non richiesto)'}</p>
+                          <p className="text-sm font-black dark:text-white">{check.stringBox.fuse.ratingA ? `${check.stringBox.fuse.ratingA} A` : '—'}</p>
+                          <p className="text-[8px] opacity-50">{check.stringBox.fuse.note}</p>
+                        </div>
+                        <div className={`rounded-xl p-3 border ${check.stringBox.breaker.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                          <p className="text-[8px] font-bold uppercase tracking-widest opacity-50">Interruttore CC</p>
+                          <p className="text-sm font-black dark:text-white">{check.stringBox.breaker.ratingA ? `${check.stringBox.breaker.ratingA} A` : '—'}</p>
+                          <p className="text-[8px] opacity-50">{check.stringBox.breaker.note}</p>
+                        </div>
+                        <div className={`rounded-xl p-3 border ${check.stringBox.switchDisconnector.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                          <p className="text-[8px] font-bold uppercase tracking-widest opacity-50">Sezionatore CC ({check.stringBox.switchDisconnector.category})</p>
+                          <p className="text-sm font-black dark:text-white">{check.stringBox.switchDisconnector.ratedCurrentA ? `${check.stringBox.switchDisconnector.ratedCurrentA} A` : '—'}</p>
+                          <p className="text-[8px] opacity-50">{check.stringBox.switchDisconnector.note}</p>
+                        </div>
+                        <div className={`rounded-xl p-3 border ${check.stringBox.spd.ok ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                          <p className="text-[8px] font-bold uppercase tracking-widest opacity-50">SPD Classe {check.stringBox.spd.spdClass}</p>
+                          <p className="text-[8px] opacity-50">{check.stringBox.spd.note}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className={`${labelCls} mb-2`}>Preview schema a blocchi</p>
+                      <PvArrayDiagram
+                        inverterName={`${inverter.name} — MPPT ${mpptIndexN}`}
+                        accentColor={moduleTheme.accent}
+                        branches={[{
+                          label: stringName || 'Stringa',
+                          panelCount: parseLocaleInt(stringsInParallel, 1),
+                          ok: check.allOk,
+                          subLabel: `${(check.totalPowerW / 1000).toFixed(2)} kW · ${chosenSection ?? '—'} mm²`,
+                          protections: {
+                            fuseRequired: check.stringBox.fuse.required,
+                            fuseOk: check.stringBox.fuse.ok,
+                            fuseRatingA: check.stringBox.fuse.ratingA,
+                            breakerOk: check.stringBox.breaker.ok,
+                            breakerRatingA: check.stringBox.breaker.ratingA,
+                            switchOk: check.stringBox.switchDisconnector.ok,
+                            switchRatingA: check.stringBox.switchDisconnector.ratedCurrentA,
+                            spdOk: check.stringBox.spd.ok,
+                            spdInKA: check.stringBox.spd.inKA,
+                          },
+                        }]}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </section>
@@ -591,8 +700,23 @@ export const StringConfigView: React.FC = () => {
 
           {/* Stringhe salvate nel progetto */}
           <section className="bg-white dark:bg-[#141414] border border-black/10 dark:border-white/10 rounded-3xl premium-shadow overflow-hidden">
-            <div className="p-6 border-b border-black/5 dark:border-white/5">
+            <div className="p-6 border-b border-black/5 dark:border-white/5 flex items-center justify-between gap-3">
               <h3 className="text-sm font-black dark:text-white uppercase tracking-tight">Stringhe nel progetto "{activeProject.name}"</h3>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsSystemPreviewOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-all dark:text-white"
+                >
+                  <Layers size={12} /> Preview impianto
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white"
+                  style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
+                >
+                  <FileDown size={12} /> Esporta report PDF
+                </button>
+              </div>
             </div>
             {activeProject.stringConfigs.length === 0 ? (
               <div className="p-8 text-center">
@@ -612,13 +736,16 @@ export const StringConfigView: React.FC = () => {
                         <div className="min-w-0">
                           <p className="text-[11px] font-bold dark:text-white truncate">{cfg.name}</p>
                           <p className="text-[9px] opacity-40 dark:text-white/40 truncate">
-                            {pnl?.name || '?'} × {cfg.panelsInSeries} serie, {cfg.stringsInParallel} parallelo · {inv?.name || '?'}
+                            {pnl?.name || '?'} × {cfg.panelsInSeries} serie, {cfg.stringsInParallel} parallelo · {inv?.name || '?'} · MPPT {cfg.mpptIndex ?? 1}
                           </p>
                         </div>
                       </button>
                       <p className="text-sm font-black shrink-0" style={{ color: moduleTheme.accent }}>
                         {cfg.selectedSectionMm2 ?? '—'}<span className="text-[10px] font-bold opacity-40 ml-0.5">mm²</span>
                       </p>
+                      <button onClick={() => loadConfigIntoForm(cfg)} className="p-2 opacity-60 hover:opacity-100 rounded-lg transition-colors shrink-0 dark:text-white">
+                        <Pencil size={14} />
+                      </button>
                       <button onClick={() => removeStringConfig(cfg.id)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors shrink-0">
                         <Trash2 size={14} />
                       </button>
@@ -630,6 +757,15 @@ export const StringConfigView: React.FC = () => {
           </section>
         </div>
       </div>
+
+      <SystemPreviewModal
+        isOpen={isSystemPreviewOpen}
+        onClose={() => setIsSystemPreviewOpen(false)}
+        project={activeProject}
+        catalogInverters={catalogInverters}
+        catalogPanels={catalogPanels}
+        accentColor={moduleTheme.accent}
+      />
     </motion.div>
   );
 };

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
-import { ChevronLeft, Sun, Moon, LogOut, Boxes } from 'lucide-react';
+import { ChevronLeft, Sun, Moon, LogOut, Boxes, FolderInput, Plus, FolderOpen, Save, Trash2 } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
+import { useProject } from '../../context/ProjectContext';
 import { Toast } from '../Toast';
 import { Logo } from '@/components/Logo';
 
@@ -40,7 +41,17 @@ function NavItem({
 
 export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
-  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab } = useApp();
+  const { darkMode, setDarkMode, moduleTheme, toastData, activeTab, setActiveTab, showToast } = useApp();
+  const {
+    activeProject, addNewProject, renameProject,
+    savedProjects, isLoadingSaved, refreshSavedProjects, loadProject, deleteSavedProject, saveProject,
+  } = useProject();
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
+
+  useEffect(() => {
+    refreshSavedProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const user = (() => {
     try { return JSON.parse(localStorage.getItem('cablefill_user') ?? 'null'); } catch { return null; }
@@ -91,6 +102,75 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
                 />
               ))}
             </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold opacity-40 mb-4 tracking-widest flex items-center gap-1.5">
+              <FolderInput size={12} /> PROGETTO
+            </p>
+            <input
+              type="text"
+              value={activeProject.name}
+              onChange={e => renameProject(activeProject.id, e.target.value.toUpperCase())}
+              placeholder="NOME DEL PROGETTO"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-tight text-white outline-none focus:ring-2 transition-all mb-1.5"
+              style={{ ['--tw-ring-color' as any]: moduleTheme.accent }}
+            />
+            <p className="text-[9px] opacity-40 mb-3">
+              {activeProject.stringConfigs.length} string{activeProject.stringConfigs.length === 1 ? 'a' : 'he'}
+            </p>
+
+            <div className="space-y-1.5">
+              <button
+                onClick={() => addNewProject()}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all text-white"
+              >
+                <Plus size={12} /> Nuovo
+              </button>
+              <button
+                onClick={() => { setIsBrowseOpen(o => !o); if (!isBrowseOpen) refreshSavedProjects(); }}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all text-white"
+              >
+                <FolderOpen size={12} /> Progetti salvati
+              </button>
+              <button
+                onClick={() => saveProject(showToast)}
+                className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-white transition-all"
+                style={{ background: `linear-gradient(135deg, ${moduleTheme.primary}, ${moduleTheme.accent})` }}
+              >
+                <Save size={12} /> Salva progetto
+              </button>
+            </div>
+
+            {isBrowseOpen && (
+              <div className="mt-3 space-y-1.5">
+                <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 mb-1">
+                  {isLoadingSaved ? 'Caricamento...' : `${savedProjects.length} progetto/i salvato/i`}
+                </p>
+                {savedProjects.length === 0 && !isLoadingSaved && (
+                  <p className="text-[9px] opacity-40">Nessun progetto salvato ancora.</p>
+                )}
+                {savedProjects.map(p => (
+                  <div key={p.id} className="flex items-center justify-between gap-1 bg-white/5 rounded-lg px-2.5 py-2">
+                    <button
+                      onClick={() => { loadProject(p); setIsBrowseOpen(false); }}
+                      className="flex-1 text-left min-w-0"
+                    >
+                      <p className="text-[10px] font-bold text-white truncate">{p.name}</p>
+                      <p className="text-[8px] opacity-40 truncate">
+                        {p.stringConfigs.length} stringhe · {p.lastSaved}
+                      </p>
+                    </button>
+                    <button
+                      onClick={() => deleteSavedProject(p.id, showToast)}
+                      className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </nav>
 

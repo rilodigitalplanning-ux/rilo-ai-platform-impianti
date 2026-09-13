@@ -63,7 +63,14 @@ export const CABLE_TYPES: CableType[] = [
 
 export interface DcCableInput {
   lengthM: number;   // L — lunghezza tratta singola (andata), non andata+ritorno
-  currentA: number;  // I — corrente di circuito (Isc di stringa)
+  /** Corrente di esercizio (Impp di stringa) — usata per il criterio di caduta di tensione. */
+  currentForDropA: number;
+  /**
+   * Corrente di progetto Ib per il criterio di portata: il rating della
+   * protezione del quadro di campo (interruttore/fusibile) se presente,
+   * altrimenti 1,25 × Isc come da normativa in assenza di protezione.
+   */
+  currentForAmpacityA: number;
   deltaVoltsV: number; // ΔV — caduta di tensione ammessa, in volt
   cableType: CableType;
 }
@@ -73,7 +80,7 @@ export interface DcCableResult {
   sMinAmpacityMm2: number | null; // sezione minima per sola portata (null se nessuna sezione disponibile è sufficiente)
   sCommercialMm2: number | null;  // sezione consigliata finale (la maggiore tra i due criteri)
   bindingCriterion: 'voltage-drop' | 'ampacity' | null; // quale criterio ha determinato la sezione finale
-  requiredIzA: number; // portata minima richiesta (1,25 × Isc)
+  requiredIzA: number; // portata minima richiesta (= corrente di progetto Ib)
 }
 
 /** Caduta di tensione reale (V) usando una sezione qualsiasi (es. scelta manualmente dall'utente). */
@@ -87,10 +94,10 @@ export function ampacityForSection(cableType: CableType, sectionMm2: number): nu
 }
 
 export function calculateDcCableSection(input: DcCableInput): DcCableResult {
-  const { lengthM, currentA, deltaVoltsV, cableType } = input;
+  const { lengthM, currentForDropA, currentForAmpacityA, deltaVoltsV, cableType } = input;
 
-  const sMinVoltageDropMm2 = (2 * lengthM * currentA * COPPER_RESISTIVITY_HOT) / deltaVoltsV;
-  const requiredIzA = currentA * AMPACITY_SAFETY_FACTOR;
+  const sMinVoltageDropMm2 = (2 * lengthM * currentForDropA * COPPER_RESISTIVITY_HOT) / deltaVoltsV;
+  const requiredIzA = currentForAmpacityA;
 
   const sMinAmpacityMm2 = STANDARD_SECTIONS.find(s => (cableType.ampacityBySection[s] ?? 0) >= requiredIzA) ?? null;
 
