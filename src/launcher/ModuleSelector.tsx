@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench, FileCode2, SunMedium } from 'lucide-react';
+import { Layers, BarChart3, Table2, ArrowRight, Zap, Moon, Sun, Wrench, FileCode2, SunMedium, Calculator } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 const MODULES = [
@@ -76,6 +76,18 @@ const MODULES = [
     accent: '#f2b705',
     primary: '#4a3b0f',
     tags: ['Fotovoltaico', 'Cavo DC', 'Caduta di Tensione', 'Dimensionamento'],
+  },
+  {
+    id: 'cme-generator',
+    route: '/cme-generator',
+    name: 'CME Generator',
+    tagline: 'Computo metrico estimativo da Revit con abbinamento IA',
+    description:
+      "Importa le quantità esportate da Revit, abbina automaticamente le voci ai prezzari (DEI e regionali) con l'IA, rivedi i risultati e genera il computo metrico in Excel nel template Rilo.",
+    icon: Calculator,
+    accent: '#E94560',
+    primary: '#0F3460',
+    tags: ['Revit', 'Prezzario', 'Abbinamento IA', 'Export Excel'],
   },
 ] as const;
 

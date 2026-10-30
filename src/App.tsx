@@ -7,6 +7,7 @@ import { PanelScheduleApp } from './modules/panel-schedule/PanelScheduleApp';
 import { CMEEditorApp } from './modules/cme-editor/CMEEditorApp';
 import { PdfDxfApp } from './modules/pdf-dxf/PdfDxfApp';
 import { ImpiantoFvApp } from './modules/impianto-fv/ImpiantoFvApp';
+import { CmeGeneratorApp } from './modules/cme-generator/CmeGeneratorApp';
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
         <Route path="/cme-editor/*" element={<CMEEditorApp />} />
         <Route path="/pdf-dxf/*" element={<PdfDxfApp />} />
         <Route path="/impianto-fv/*" element={<ImpiantoFvApp />} />
+        <Route path="/cme-generator/*" element={<CmeGeneratorApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
