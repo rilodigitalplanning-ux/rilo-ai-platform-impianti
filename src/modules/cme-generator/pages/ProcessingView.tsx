@@ -6,6 +6,7 @@ import { buildNvpResult } from '../services/claudeService';
 import { loadVoci } from '../services/prezzarioService';
 import { useCme } from '../context/CmeContext';
 import { NvpBuilderModal } from '../components/NvpBuilderModal';
+import { buildResultFromComponenti, collectNvpCodes, nvpCodeKey, voceKey, type NvpAnalysis } from '../services/cmeBuilder';
 import type { Elemento, PrezzarioVoce, ResultadoItem } from '../types';
 
 interface ProcessingViewProps {
@@ -56,6 +57,40 @@ export function ProcessingView({
       if (targetVoci.length === 0) {
         addLog('⚠ Prezzario di destinazione vuoto — verificare le Impostazioni.', 'err');
         dispatch({ type: 'SET_PROCESSING', payload: false });
+        return;
+      }
+
+      // ── Scheda CME (composizioni fino a 5 voci, NVP riconosciute dal codice) ──
+      if (state.elementos.some(e => e.componenti)) {
+        const voci = new Map<string, PrezzarioVoce>();
+        for (const v of targetVoci) if (!voci.has(voceKey(v.codice))) voci.set(voceKey(v.codice), v);
+
+        const nvpCodes = collectNvpCodes(state.elementos);
+        const nvps = new Map<string, NvpAnalysis>();
+        if (nvpCodes.length > 0) {
+          addLog(`${nvpCodes.length} codici NVP da analizzare (una analisi per codice, riusata su tutti gli elementi).`, 'alert');
+          for (const n of nvpCodes) {
+            const pseudo = {
+              idUnico: n.codice, edificio: `${n.nElementi} elementi`, livello: n.codice, zona: '',
+              descricao: n.descrizione, tariffa: n.codice, quantita: 1, fatorWBS: 1, countRevit: 1,
+            } as Elemento;
+            const a = await askNvp(pseudo);
+            nvps.set(nvpCodeKey(n.codice), a);
+            addLog(`✓ NVP ${n.codice} → €${a.valoreUnitario.toFixed(2)}`, 'ok');
+          }
+        }
+
+        for (let i = 0; i < state.elementos.length; i++) {
+          const el = state.elementos[i];
+          dispatch({ type: 'SET_PROGRESS', payload: { current: i + 1, total: state.elementos.length, message: `${el.descricao.slice(0, 40)}...` } });
+          const result = buildResultFromComponenti(el, voci, nvps, targetPrezzarioName);
+          dispatch({ type: 'ADD_RESULTADO', payload: result });
+          if (result.status === 'NAO_ENCONTRADO') addLog(`✗ ${el.descricao.slice(0, 35)} — ${result.notes}`, 'err');
+        }
+
+        dispatch({ type: 'SET_PROCESSING', payload: false });
+        addLog('✓ Elaborazione completata! Vai ai Risultati.', 'ok');
+        setTimeout(onDone, 1200);
         return;
       }
 

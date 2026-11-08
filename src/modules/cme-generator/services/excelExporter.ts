@@ -12,7 +12,7 @@ import type * as XLSXType from 'xlsx';
 
 function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLSXType.WorkSheet {
   const headers = [
-    'EDIFICIO', 'LIVELLO', 'ZONA', 'IMPIANTO', 'CATEGORIA', 'DESCRIZIONE',
+    'WBS1', 'WBS2', 'WBS3', 'WBS4', 'IMPIANTO', 'CATEGORIA', 'DESCRIZIONE',
     'QTD', 'UM', 'VALORE UNIT.', 'TOTALE (€)', 'PREZZARIO', 'STATUS',
   ];
 
@@ -21,9 +21,10 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
   for (const item of results) {
     // Main header row for the element (bold, WBS and Code empty)
     dataRows.push([
-      '', // EDIFICIO
-      '', // LIVELLO
-      '', // ZONA
+      '', // WBS1
+      '', // WBS2
+      '', // WBS3
+      '', // WBS4
       item.tipoImpianto || '', // IMPIANTO
       item.categoria,
       item.descrizioneElemento,
@@ -52,6 +53,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
         item.edificio,
         item.livello,
         item.zona,
+        item.wbs4 || '',
         item.tipoImpianto || '', // IMPIANTO
         item.categoria,
         `  [${sub.codicePrezzarioTarget || 'NVP'}] ${sub.descrizionePrezzarioTarget}`,
@@ -72,7 +74,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
 
   // Set column widths
   ws['!cols'] = [
-    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 48 },
+    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 48 },
     { wch: 9 },  { wch: 8 },  { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 12 },
   ];
 
@@ -114,7 +116,7 @@ function buildLivelloSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
   const edificios = [...new Set(results.map(r => r.edificio))].sort();
   const livelli   = [...new Set(results.map(r => r.livello))].sort();
 
-  const headers = ['LIVELLO \\ EDIFICIO', ...edificios];
+  const headers = ['WBS2 \\ WBS1', ...edificios];
   const dataRows = livelli.map(lv => {
     const row: any[] = [lv];
     for (const ed of edificios) {
@@ -132,7 +134,7 @@ function buildLivelloSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
 }
 
 function buildEdificioSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLSXType.WorkSheet {
-  const headers = ['EDIFICIO', 'CATEGORIA', 'TOTALE (€)'];
+  const headers = ['WBS1', 'CATEGORIA', 'TOTALE (€)'];
   const rows: any[][] = [headers];
 
   const edificios = [...new Set(results.map(r => r.edificio))].sort();
@@ -205,8 +207,8 @@ export async function exportExcel(
 
   XLSX.utils.book_append_sheet(wb, buildComputoSheet(XLSX, results), 'Computo');
   XLSX.utils.book_append_sheet(wb, buildCategoriaSheet(XLSX, results), 'Categoria');
-  XLSX.utils.book_append_sheet(wb, buildLivelloSheet(XLSX, results), 'Livello');
-  XLSX.utils.book_append_sheet(wb, buildEdificioSheet(XLSX, results), 'Edificio');
+  XLSX.utils.book_append_sheet(wb, buildLivelloSheet(XLSX, results), 'WBS2');
+  XLSX.utils.book_append_sheet(wb, buildEdificioSheet(XLSX, results), 'WBS1');
   XLSX.utils.book_append_sheet(wb, buildDashboardSheet(XLSX, results), 'Dashboard');
 
   const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });

@@ -23,6 +23,18 @@ export interface Elemento {
   fatorWBS2?:  number;   // WBSt_4 — secondary composition multiplier
   unidade?:    string;   // Product unit exported in the Revit CSV
   tipoImpianto?: string; // TIPO DI IMPIANTI column value
+  /** WBS4 (formato scheda CME: WBS fino a 4 livelli; edificio/livello/zona = WBS1/WBS2/WBS3) */
+  wbs4?:       string;
+  /** CME_CATEGORIE della scheda, usata nei riepiloghi dei costi */
+  categoriaCme?: string;
+  /** Composizione (fino a 5 voci) letta da CME_ELE01..10: codice + fattore per unità di elemento */
+  componenti?: Componente[];
+}
+
+export interface Componente {
+  codice: string;
+  fattore: number;
+  isNvp: boolean;
 }
 
 // ── Processed result ──────────────────────────────────────────────────────────
@@ -63,6 +75,7 @@ export interface ResultadoItem {
   tariffaOriginal?: string;
   nvpDetails?: any;
   tipoImpianto?: string;
+  wbs4?: string;
 }
 
 // ── Prezzario (price list) ────────────────────────────────────────────────────

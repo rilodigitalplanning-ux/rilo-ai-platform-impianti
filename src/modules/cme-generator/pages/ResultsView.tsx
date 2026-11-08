@@ -85,8 +85,8 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const TABS = [
     { id: 'computo', label: 'Computo' },
     { id: 'categoria', label: 'Categoria' },
-    { id: 'livello', label: 'Livello' },
-    { id: 'edificio', label: 'Edificio' },
+    { id: 'livello', label: 'WBS2' },
+    { id: 'edificio', label: 'WBS1' },
     { id: 'dashboard', label: 'Dashboard' },
   ] as const;
 
@@ -146,7 +146,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white dark:bg-[#080C14]">
                 <tr className="text-xs text-gray-500 dark:text-white/40 font-bold tracking-widest uppercase">
-                  {['Edificio','Livello','Zona','Impianto','Codice','Categoria','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
+                  {['WBS1','WBS2','WBS3','WBS4','Impianto','Codice','Categoria','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
                     <th key={h} className="px-4 py-3 text-left whitespace-nowrap border-b border-gray-200 dark:border-white/5">{h}</th>
                   ))}
                 </tr>
@@ -174,6 +174,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                       <td className="px-4 py-2.5"></td> {/* Edificio - blank */}
                       <td className="px-4 py-2.5"></td> {/* Livello - blank */}
                       <td className="px-4 py-2.5"></td> {/* Zona - blank */}
+                      <td className="px-4 py-2.5"></td> {/* WBS4 - blank */}
                       <td className="px-4 py-2.5 text-gray-700 dark:text-white/50 text-xs font-semibold">{r.tipoImpianto || ''}</td> {/* Impianto */}
                       <td className="px-4 py-2.5"></td> {/* Codice - blank */}
                       <td className="px-4 py-2.5 text-gray-900 dark:text-white text-xs">{r.categoria}</td>
@@ -211,6 +212,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                           <td className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{r.edificio}</td>
                           <td className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{r.livello}</td>
                           <td className="px-4 py-2 text-gray-500 dark:text-white/40">{r.zona}</td>
+                          <td className="px-4 py-2 text-gray-500 dark:text-white/40">{r.wbs4 || ''}</td>
                           <td className="px-4 py-2 text-gray-400 dark:text-white/30 text-[11px]">{r.tipoImpianto || ''}</td> {/* Impianto */}
                           <td className="px-4 py-2 font-mono text-[10px] text-gray-400 dark:text-white/30">{sub.codicePrezzarioTarget || 'NVP'}</td>
                           <td className="px-4 py-2 text-gray-400 dark:text-white/30">{r.categoria}</td>
@@ -266,7 +268,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
         <div className="flex-1 overflow-auto p-6">
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-gray-500 dark:text-white/40 uppercase tracking-widest border-b border-gray-300 dark:border-white/10">
-              <th className="text-left py-3 px-4">Edificio</th>
+              <th className="text-left py-3 px-4">WBS1</th>
               <th className="text-right py-3 px-4">Voci</th>
               <th className="text-right py-3 px-4">Totale (€)</th>
               <th className="text-right py-3 px-4">%</th>
@@ -295,7 +297,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-300 dark:border-white/10">
-                    <th className="text-left py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">Livello</th>
+                    <th className="text-left py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">WBS2</th>
                     {edificios.map(ed => <th key={ed} className="text-right py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">{ed}</th>)}
                     <th className="text-right py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">Totale</th>
                   </tr>
@@ -356,7 +358,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               </div>
             </div>
             <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
-              <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase mb-4">Per Edificio</h3>
+              <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase mb-4">Per WBS1</h3>
               <div className="space-y-3">
                 {byEdificio.map(([ed, total]) => (
                   <div key={ed}>

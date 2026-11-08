@@ -5,6 +5,7 @@
 import ExcelJS from 'exceljs';
 import { parseItNumber } from '../lib/parseNumber';
 import type { Elemento } from '../types';
+import { detectCmeColumns, parseCmeRows } from './cmeSheet';
 
 const COL_DESC    = 'Descricao';
 const COL_WBSt1   = 'WBSt_1';
@@ -70,6 +71,42 @@ export async function parseRevitExcel(buffer: ArrayBuffer): Promise<ExcelParseRe
   
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
+
+  // Formato scheda CME (RDP_WBS*, CME_ELE*): foglio 1 = BIM ON, foglio 2 = BIM OFF
+  const cellValue = (c: ExcelJS.Cell): unknown => {
+    const v: any = c.value;
+    if (v == null) return '';
+    if (typeof v === 'object') {
+      if ('result' in v) return v.result ?? '';
+      if ('richText' in v) return v.richText.map((t: any) => t.text).join('');
+      if ('text' in v) return v.text;
+      if (v instanceof Date) return v.toISOString();
+    }
+    return v;
+  };
+  const sheetRows = (ws: ExcelJS.Worksheet): unknown[][] => {
+    const rows: unknown[][] = [];
+    ws.eachRow({ includeEmpty: true }, (row) => {
+      const vals: unknown[] = [];
+      for (let c = 1; c <= ws.columnCount; c++) vals.push(cellValue(row.getCell(c)));
+      rows.push(vals);
+    });
+    return rows;
+  };
+  const firstCols = workbook.worksheets[0] ? detectCmeColumns(sheetRows(workbook.worksheets[0])[0] ?? []) : null;
+  if (firstCols) {
+    workbook.worksheets.forEach((ws, idx) => {
+      if (idx > 1) { warnings.push(`Foglio ignorato: ${ws.name} (sono letti solo il foglio 1 = BIM ON e il foglio 2 = BIM OFF)`); return; }
+      const rows = sheetRows(ws);
+      const cols = idx === 0 ? firstCols : detectCmeColumns(rows[0] ?? []);
+      if (!cols) { warnings.push(`Foglio ${ws.name}: intestazioni non riconosciute (RDP_WBS*, CME_ELE*), ignorato.`); return; }
+      const out = parseCmeRows(rows, cols, idx === 0 ? 'BIM ON' : 'BIM OFF', makeId, ws.name);
+      elementos.push(...out.elementos);
+      warnings.push(...out.warnings);
+    });
+    if (elementos.length === 0) throw new Error('Nessun elemento valido trovato nella scheda CME.');
+    return { elementos, warnings };
+  }
 
   let rawBimOffData: any[][] | undefined = undefined;
 
