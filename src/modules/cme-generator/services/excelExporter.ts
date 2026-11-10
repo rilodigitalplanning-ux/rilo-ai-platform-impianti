@@ -3,6 +3,7 @@
 // Generate a 5-sheet .xlsx workbook from ResultadoItem[]
 // Uses SheetJS (xlsx) — 100% browser-native, no Node.js dependencies.
 // ─────────────────────────────────────────────────────────────────────────────
+import { wbsLevels, wbsDepth } from '../lib/wbs';
 import type { ResultadoItem } from '../types';
 import type * as XLSXType from 'xlsx';
 
@@ -11,8 +12,9 @@ import type * as XLSXType from 'xlsx';
 // We use cell metadata and rely on data organisation for visual clarity.
 
 function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLSXType.WorkSheet {
+  const depth = wbsDepth(results);
   const headers = [
-    'WBS1', 'WBS2', 'WBS3', 'WBS4', 'IMPIANTO', 'CATEGORIA', 'DESCRIZIONE',
+    ...Array.from({ length: depth }, (_, i) => `WBS${i + 1}`), 'IMPIANTO', 'CATEGORIA', 'DESCRIZIONE',
     'QTD', 'UM', 'VALORE UNIT.', 'TOTALE (€)', 'PREZZARIO', 'STATUS',
   ];
 
@@ -21,10 +23,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
   for (const item of results) {
     // Main header row for the element (bold, WBS and Code empty)
     dataRows.push([
-      '', // WBS1
-      '', // WBS2
-      '', // WBS3
-      '', // WBS4
+      ...Array<string>(depth).fill(''), // WBS
       item.tipoImpianto || '', // IMPIANTO
       item.categoria,
       item.descrizioneElemento,
@@ -50,10 +49,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
       const childQty = item.quantitaElemento * (sub.quantitaComposizione || 1);
       const childTot = childQty * (sub.valoreUnitario || 0);
       dataRows.push([
-        item.edificio,
-        item.livello,
-        item.zona,
-        item.wbs4 || '',
+        ...Array.from({ length: depth }, (_, i) => wbsLevels(item)[i] ?? ''),
         item.tipoImpianto || '', // IMPIANTO
         item.categoria,
         `  [${sub.codicePrezzarioTarget || 'NVP'}] ${sub.descrizionePrezzarioTarget}`,
@@ -74,7 +70,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): XLS
 
   // Set column widths
   ws['!cols'] = [
-    { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 48 },
+    ...Array.from({ length: depth }, () => ({ wch: 16 })), { wch: 18 }, { wch: 18 }, { wch: 48 },
     { wch: 9 },  { wch: 8 },  { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 12 },
   ];
 

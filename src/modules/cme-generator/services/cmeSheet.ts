@@ -104,6 +104,7 @@ export function parseCmeRows(
       livello: wbs[1],
       zona: wbs[2],
       wbs4: wbs[3],
+      wbs: wbs.filter(Boolean),
       descricao: nome || componenti[0].codice,
       tariffa: componenti[0].codice,
       fatorWBS: componenti[0].fattore,

@@ -3,7 +3,7 @@
 // Global state for the CME Generator module
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
-import type { Elemento, ResultadoItem, CmeState, ChatMessage } from '../types';
+import type { Elemento, ResultadoItem, CmeState, ChatMessage, AgentMessage } from '../types';
 
 type Action =
   | { type: 'SET_ELEMENTOS'; payload: Elemento[] }
@@ -16,7 +16,13 @@ type Action =
   | { type: 'SET_PROJECT_ID'; payload: { id: string; name: string } | null }
   | { type: 'LOAD_PROJECT'; payload: any }
   | { type: 'APPLY_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[] } }
+  | { type: 'IMPORT_PROJECT'; payload: { name: string; resultados: ResultadoItem[] } }
   | { type: 'MARK_SAVED' }
+  | { type: 'AGENT_ADD_MSG'; payload: AgentMessage }
+  | { type: 'AGENT_CLEAR_CHAT' }
+  | { type: 'APPLY_AGENT_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[]; label: string } }
+  | { type: 'UNDO' }
+  | { type: 'REDO' }
   | { type: 'RESET' };
 
 const initialState: CmeState = {
@@ -29,7 +35,9 @@ const initialState: CmeState = {
   dirty:       false,
 };
 
-function reducer(state: CmeState, action: Action): CmeState {
+const MAX_UNDO = 30;
+
+export function cmeReducer(state: CmeState, action: Action): CmeState {
   switch (action.type) {
     case 'SET_ELEMENTOS':
       return { ...state, elementos: action.payload };
@@ -69,10 +77,51 @@ function reducer(state: CmeState, action: Action): CmeState {
       }
       return { ...state, resultados, overrides, dirty: true };
     }
+    case 'IMPORT_PROJECT':
+      // Progetto nuovo da file esterno (XPWE): non ancora salvato
+      return {
+        ...initialState,
+        resultados: new Map(action.payload.resultados.map(r => [r.idElemento, r])),
+        overrides: new Map(),
+        chatHistory: new Map(),
+        agentChat: [],
+        undoStack: [],
+        redoStack: [],
+        projectId: null,
+        projectName: action.payload.name,
+        dirty: true,
+      };
+    case 'AGENT_ADD_MSG':
+      return { ...state, agentChat: [...(state.agentChat ?? []), action.payload].slice(-100), dirty: true };
+    case 'AGENT_CLEAR_CHAT':
+      return { ...state, agentChat: [] };
+    case 'APPLY_AGENT_CHANGES': {
+      // Come APPLY_CHANGES, ma conserva un'istantanea per Annulla/Ripeti
+      const snap = { label: action.payload.label, resultados: state.resultados, overrides: state.overrides };
+      const resultados = new Map(state.resultados);
+      const overrides = new Map(state.overrides);
+      for (const r of action.payload.upsert) { resultados.set(r.idElemento, r); overrides.delete(r.idElemento); }
+      for (const id of action.payload.remove) { resultados.delete(id); overrides.delete(id); }
+      return { ...state, resultados, overrides, dirty: true, undoStack: [...(state.undoStack ?? []), snap].slice(-MAX_UNDO), redoStack: [] };
+    }
+    case 'UNDO': {
+      const stack = state.undoStack ?? [];
+      const snap = stack[stack.length - 1];
+      if (!snap) return state;
+      const cur = { label: snap.label, resultados: state.resultados, overrides: state.overrides };
+      return { ...state, resultados: snap.resultados, overrides: snap.overrides, dirty: true, undoStack: stack.slice(0, -1), redoStack: [...(state.redoStack ?? []), cur] };
+    }
+    case 'REDO': {
+      const stack = state.redoStack ?? [];
+      const snap = stack[stack.length - 1];
+      if (!snap) return state;
+      const cur = { label: snap.label, resultados: state.resultados, overrides: state.overrides };
+      return { ...state, resultados: snap.resultados, overrides: snap.overrides, dirty: true, redoStack: stack.slice(0, -1), undoStack: [...(state.undoStack ?? []), cur] };
+    }
     case 'MARK_SAVED':
       return { ...state, dirty: false };
     case 'RESET':
-      return { ...initialState, resultados: new Map(), overrides: new Map(), chatHistory: new Map(), rawBimOffData: undefined };
+      return { ...initialState, resultados: new Map(), overrides: new Map(), chatHistory: new Map(), rawBimOffData: undefined, agentChat: [], undoStack: [], redoStack: [] };
     case 'SET_RAW_BIM_OFF_DATA':
       return { ...state, rawBimOffData: action.payload };
     case 'SET_PROJECT_ID':
@@ -84,6 +133,9 @@ function reducer(state: CmeState, action: Action): CmeState {
         resultados: new Map(action.payload.resultados || []),
         overrides: new Map(action.payload.overrides || []),
         rawBimOffData: action.payload.rawBimOffData,
+        agentChat: action.payload.agentChat || [],
+        undoStack: [],
+        redoStack: [],
         projectId: action.payload.id,
         projectName: action.payload.name,
         dirty: false,
@@ -105,7 +157,7 @@ interface CmeContextType {
 const CmeContext = createContext<CmeContextType | null>(null);
 
 export function CmeProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(cmeReducer, initialState);
 
   const getEffectiveResult = useCallback((id: string): ResultadoItem | undefined => {
     const original = state.resultados.get(id);

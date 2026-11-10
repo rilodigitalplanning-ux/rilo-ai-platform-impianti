@@ -41,6 +41,7 @@ export function buildResultFromComponenti(
     livello: el.livello,
     zona: el.zona,
     wbs4: el.wbs4,
+    wbs: el.wbs,
     descrizioneElemento: el.descricao,
     quantitaElemento: el.quantita,
     unidade: el.unidade || '',

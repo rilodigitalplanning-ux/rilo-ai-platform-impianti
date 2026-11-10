@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import {
-  ChevronLeft, Sun, Moon, LogOut, Calculator, Database, BarChart3, ListOrdered, FolderKanban, Library, Save, Loader2,
+  ChevronLeft, Sun, Moon, LogOut, Calculator, Database, BarChart3, ListOrdered, FolderKanban, Library, Save, Loader2, Sparkles,
 } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
 import { BYPASS_USER } from '../../lib/currentUser';
 import { useCme } from '../../context/CmeContext';
+import { AgentPanel } from '../AgentPanel';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useSaveProject } from '../../hooks/useSaveProject';
 import { Toast } from '../../../cme-editor/components/Toast';
@@ -56,6 +57,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   const { state, totalAmount } = useCme();
   const { save, isSaving } = useSaveProject();
   const { guard, dialog } = useDiscardGuard();
+  const [agentOpen, setAgentOpen] = useState(false);
   const goModules = () => guard(() => navigate('/'));
   const hasProject = state.resultados.size > 0;
 
@@ -170,6 +172,15 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
             </div>
           )}
           <button
+            onClick={() => setAgentOpen(o => !o)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all shadow-sm ${agentOpen ? 'text-white border-transparent' : 'bg-[#efefef] dark:bg-white/5 border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10'}`}
+            style={agentOpen ? { backgroundColor: moduleTheme.accent } : undefined}
+            title="Assistente IA del progetto"
+          >
+            <Sparkles size={14} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Assistente IA</span>
+          </button>
+          <button
             onClick={() => setDarkMode(!darkMode)}
             className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#efefef] dark:bg-white/5 border border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all shadow-sm"
             title={darkMode ? 'Modalità chiara' : 'Modalità scura'}
@@ -191,6 +202,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
 
         {children}
       </main>
+
+      {agentOpen && <AgentPanel onClose={() => setAgentOpen(false)} />}
 
       <div className="fixed bottom-6 right-6 z-50">
         <AnimatePresence>

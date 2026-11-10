@@ -1,15 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Folder, Plus, Trash2, FolderOpen, Loader2 } from 'lucide-react';
+import { Folder, Plus, Trash2, FolderOpen, Loader2, FileUp } from 'lucide-react';
 import { listProjects, loadProject, deleteProject, CmeProject } from '../services/projectService';
 import { useDiscardGuard } from '../hooks/useDiscardGuard';
 import { useCme } from '../context/CmeContext';
+import { useApp } from '../context/AppContext';
+import { parseXpwe, xpweToResults } from '../services/xpwe';
 
 interface ProjectsViewProps {
   onNext: () => void;
+  /** Dopo l'importazione di un XPWE: apre il computo sui risultati */
+  onImported?: () => void;
 }
 
-export function ProjectsView({ onNext }: ProjectsViewProps) {
+export function ProjectsView({ onNext, onImported }: ProjectsViewProps) {
+  const { showToast } = useApp();
+  const fileRef = React.useRef<HTMLInputElement>(null);
   const { dispatch } = useCme();
   const { guard, dialog } = useDiscardGuard();
   const [projects, setProjects] = useState<CmeProject[]>([]);
@@ -68,6 +74,26 @@ export function ProjectsView({ onNext }: ProjectsViewProps) {
     }
   }
 
+  async function handleImportXpwe(file: File) {
+    setError(null);
+    try {
+      const doc = parseXpwe(await file.text());
+      const { resultados, warnings } = xpweToResults(doc);
+      if (resultados.length === 0) throw new Error('Nessuna voce di computo trovata nel file XPWE.');
+      const name = file.name.replace(/.[^.]+$/, '');
+      guard(() => {
+        dispatch({ type: 'IMPORT_PROJECT', payload: { name, resultados } });
+        showToast(
+          `XPWE importato: ${resultados.length} elementi${warnings.length ? ` (${warnings.length} righe ignorate)` : ''}. Salva il progetto per conservarlo.`,
+          'success',
+        );
+        onImported?.();
+      });
+    } catch (err: any) {
+      setError(`Importazione XPWE non riuscita: ${err.message}`);
+    }
+  }
+
   function handleNewProject() {
     guard(() => { dispatch({ type: 'RESET' }); onNext(); });
   }
@@ -79,6 +105,18 @@ export function ProjectsView({ onNext }: ProjectsViewProps) {
           <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">I Miei Progetti</h2>
           <p className="text-gray-500 dark:text-white/40 text-sm">Continua un computo salvato o iniziane uno nuovo.</p>
         </div>
+        <div className="flex gap-3">
+        <input
+          ref={fileRef} type="file" accept=".xpwe,.xml" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleImportXpwe(f); }}
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-white/10 rounded-xl font-bold tracking-widest uppercase text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+        >
+          <FileUp size={18} />
+          Importa XPWE
+        </button>
         <button
           onClick={handleNewProject}
           className="flex items-center gap-2 px-6 py-3 bg-[#E94560] text-white rounded-xl font-bold tracking-widest uppercase text-sm hover:bg-[#E94560]/80 transition-colors"
@@ -86,6 +124,7 @@ export function ProjectsView({ onNext }: ProjectsViewProps) {
           <Plus size={18} />
           Nuovo Progetto
         </button>
+        </div>
       </div>
 
       <AnimatePresence>

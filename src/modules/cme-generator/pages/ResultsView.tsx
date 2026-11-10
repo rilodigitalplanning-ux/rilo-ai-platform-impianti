@@ -1,8 +1,10 @@
 // src/modules/cmeGenerator/pages/ResultsView.tsx
+import { wbsLevels, wbsDepth } from '../lib/wbs';
 import React, { useState, useMemo } from 'react';
-import { Download, Search, Filter } from 'lucide-react';
+import { Download, Search, Filter, ChevronDown, FileSpreadsheet, FileCode2 } from 'lucide-react';
 import { useCme } from '../context/CmeContext';
 import { exportExcel } from '../services/excelExporter';
+import { buildXpwe } from '../services/xpweExport';
 import { fillTemplateAndExport } from '../services/excelFiller';
 import { hasTemplate } from '../services/templateService';
 import { useSaveProject } from '../hooks/useSaveProject';
@@ -27,12 +29,32 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<StatusItem | 'ALL'>('ALL');
   const [isExporting, setIsExporting] = useState(false);
+  const [exportMenu, setExportMenu] = useState(false);
   const { save, isSaving } = useSaveProject();
   const [editingNvpId, setEditingNvpId] = useState<string | null>(null);
 
   const editingNvpItem = editingNvpId ? state.resultados.get(editingNvpId) || (results.find(x => x.idElemento === editingNvpId)) : null;
 
+  const handleExportXpwe = () => {
+    setExportMenu(false);
+    try {
+      const name = state.projectName || 'Computo Metrico';
+      const out = buildXpwe(results, { projectName: name, fileName: `${name}.xpwe` });
+      const url = URL.createObjectURL(new Blob([out.xml], { type: 'application/xml;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name.replace(/[\\/:*?"<>|]+/g, '_')}.xpwe`;
+      a.click();
+      URL.revokeObjectURL(url);
+      const w = out.warnings.length ? '\n\nAvvisi:\n- ' + out.warnings.join('\n- ') : '';
+      alert(`XPWE esportato: ${out.stats.prezzi} voci di elenco prezzi (${out.stats.np} NP), ${out.stats.voci} voci di computo, ${out.stats.righe} righe di misura.${w}`);
+    } catch (err: any) {
+      alert(err.message || "Errore durante l'esportazione XPWE.");
+    }
+  };
+
   const handleExport = async () => {
+    setExportMenu(false);
     setIsExporting(true);
     try {
       const useTemplate = await hasTemplate();
@@ -59,6 +81,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
     });
   }, [results, search, filterStatus]);
 
+  const depth = useMemo(() => wbsDepth(results), [results]);
   const grandTotal = filtered.reduce((s, r) => s + r.total, 0);
 
   // Aggregations
@@ -110,14 +133,32 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
         >
           {isSaving ? 'SALVATAGGIO...' : 'SALVA PROGETTO'}
         </button>
-        <button
-          onClick={handleExport}
-          disabled={isExporting}
-          className="flex items-center gap-2 px-4 py-2 bg-green-900/30 border border-green-700/40 rounded-xl text-green-400 text-xs font-bold tracking-widest uppercase hover:bg-green-900/50 transition-colors disabled:opacity-50"
-        >
-          <Download size={14} />
-          {isExporting ? 'ESPORTAZIONE IN CORSO...' : 'ESPORTA EXCEL'}
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setExportMenu(o => !o)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 bg-green-900/30 border border-green-700/40 rounded-xl text-green-400 text-xs font-bold tracking-widest uppercase hover:bg-green-900/50 transition-colors disabled:opacity-50"
+          >
+            <Download size={14} />
+            {isExporting ? 'ESPORTAZIONE IN CORSO...' : 'ESPORTA'}
+            <ChevronDown size={14} />
+          </button>
+          {exportMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setExportMenu(false)} />
+              <div className="absolute right-0 mt-2 w-60 z-50 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#141414] shadow-2xl overflow-hidden text-gray-900 dark:text-white">
+                <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/10">
+                  <FileSpreadsheet size={16} className="text-green-500" />
+                  <span><span className="block text-xs font-bold">Excel</span><span className="block text-[10px] opacity-50">Modello Rilo (.xlsx)</span></span>
+                </button>
+                <button onClick={handleExportXpwe} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/10 border-t border-black/5 dark:border-white/5">
+                  <FileCode2 size={16} className="text-orange-500" />
+                  <span><span className="block text-xs font-bold">XPWE</span><span className="block text-[10px] opacity-50">Interscambio PriMus (.xpwe)</span></span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Computo tab */}
@@ -146,7 +187,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white dark:bg-[#080C14]">
                 <tr className="text-xs text-gray-500 dark:text-white/40 font-bold tracking-widest uppercase">
-                  {['WBS1','WBS2','WBS3','WBS4','Impianto','Codice','Categoria','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
+                  {[...Array.from({ length: depth }, (_, i) => `WBS${i + 1}`),'Impianto','Codice','Categoria','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
                     <th key={h} className="px-4 py-3 text-left whitespace-nowrap border-b border-gray-200 dark:border-white/5">{h}</th>
                   ))}
                 </tr>
@@ -171,10 +212,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                     <tr key={`parent-${r.idElemento}`}
                       onClick={() => onSelectElement(r.idElemento)}
                       className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200 dark:border-white/5 ${parentBg} font-bold`}>
-                      <td className="px-4 py-2.5"></td> {/* Edificio - blank */}
-                      <td className="px-4 py-2.5"></td> {/* Livello - blank */}
-                      <td className="px-4 py-2.5"></td> {/* Zona - blank */}
-                      <td className="px-4 py-2.5"></td> {/* WBS4 - blank */}
+                      {Array.from({ length: depth }, (_, i) => <td key={i} className="px-4 py-2.5"></td>)}
                       <td className="px-4 py-2.5 text-gray-700 dark:text-white/50 text-xs font-semibold">{r.tipoImpianto || ''}</td> {/* Impianto */}
                       <td className="px-4 py-2.5"></td> {/* Codice - blank */}
                       <td className="px-4 py-2.5 text-gray-900 dark:text-white text-xs">{r.categoria}</td>
@@ -209,10 +247,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                         <tr key={`child-${r.idElemento}-${subIdx}`}
                           onClick={() => onSelectElement(r.idElemento)}
                           className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200/50 dark:border-white/[0.02] text-xs text-gray-500 dark:text-white/50 ${childBg}`}>
-                          <td className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{r.edificio}</td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{r.livello}</td>
-                          <td className="px-4 py-2 text-gray-500 dark:text-white/40">{r.zona}</td>
-                          <td className="px-4 py-2 text-gray-500 dark:text-white/40">{r.wbs4 || ''}</td>
+                          {Array.from({ length: depth }, (_, i) => <td key={i} className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{wbsLevels(r)[i] ?? ''}</td>)}
                           <td className="px-4 py-2 text-gray-400 dark:text-white/30 text-[11px]">{r.tipoImpianto || ''}</td> {/* Impianto */}
                           <td className="px-4 py-2 font-mono text-[10px] text-gray-400 dark:text-white/30">{sub.codicePrezzarioTarget || 'NVP'}</td>
                           <td className="px-4 py-2 text-gray-400 dark:text-white/30">{r.categoria}</td>

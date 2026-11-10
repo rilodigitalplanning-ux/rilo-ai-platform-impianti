@@ -28,7 +28,10 @@ function CmeGeneratorInner() {
       {activeTab === 'prezzari' && <PrezzariView />}
       {activeTab === 'banco-progetti' && (
         <div className="flex-1 flex flex-col overflow-auto bg-gray-50 dark:bg-[#060A12] text-gray-900 dark:text-white">
-          <ProjectsView onNext={() => { setComputoView('setup'); setActiveTab('computo'); }} />
+          <ProjectsView
+            onNext={() => { setComputoView('setup'); setActiveTab('computo'); }}
+            onImported={() => { setComputoView('results'); setActiveTab('computo'); }}
+          />
         </div>
       )}
     </MainLayout>

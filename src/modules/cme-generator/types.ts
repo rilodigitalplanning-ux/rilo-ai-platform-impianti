@@ -25,6 +25,8 @@ export interface Elemento {
   tipoImpianto?: string; // TIPO DI IMPIANTI column value
   /** WBS4 (formato scheda CME: WBS fino a 4 livelli; edificio/livello/zona = WBS1/WBS2/WBS3) */
   wbs4?:       string;
+  /** Percorso WBS completo (N livelli); edificio/livello/zona/wbs4 ne sono i primi 4 */
+  wbs?:        string[];
   /** CME_CATEGORIE della scheda, usata nei riepiloghi dei costi */
   categoriaCme?: string;
   /** Composizione (fino a 5 voci) letta da CME_ELE01..10: codice + fattore per unità di elemento */
@@ -76,6 +78,8 @@ export interface ResultadoItem {
   nvpDetails?: any;
   tipoImpianto?: string;
   wbs4?: string;
+  /** Percorso WBS completo (N livelli); edificio/livello/zona/wbs4 ne sono i primi 4 */
+  wbs?: string[];
 }
 
 // ── Prezzario (price list) ────────────────────────────────────────────────────
@@ -104,7 +108,26 @@ export type CmeAction =
   | { type: 'LOAD_PROJECT'; payload: any }
   | { type: 'RESET' };
 
+export interface AgentMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  /** Riepilogo delle modifiche applicate da questa risposta */
+  meta?: { modificati: number; eliminati: number; prima: number; dopo: number };
+}
+
+/** Istantanea del computo per Annulla/Ripeti dei comandi dell'assistente */
+export interface Snapshot {
+  label: string;
+  resultados: Map<string, ResultadoItem>;
+  overrides: Map<string, Partial<ResultadoItem>>;
+}
+
 export interface CmeState {
+  /** Conversazione con l'assistente IA del progetto (salvata con il progetto) */
+  agentChat?: AgentMessage[];
+  undoStack?: Snapshot[];
+  redoStack?: Snapshot[];
   elementos: Elemento[];
   resultados: Map<string, ResultadoItem>;
   overrides: Map<string, Partial<ResultadoItem>>;

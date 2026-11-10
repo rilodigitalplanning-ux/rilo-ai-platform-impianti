@@ -48,6 +48,7 @@ export async function saveProject(name: string, state: Partial<CmeState>, id?: s
     resultados: state.resultados ? Array.from(state.resultados.entries()) : [],
     overrides: state.overrides ? Array.from(state.overrides.entries()) : [],
     rawBimOffData: state.rawBimOffData,
+    agentChat: (state.agentChat || []).slice(-100),
   };
 
   if (id) {
