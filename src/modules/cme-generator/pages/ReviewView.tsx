@@ -202,6 +202,16 @@ export function ReviewView({ user, onFinish, onSkip }: ReviewViewProps) {
     setItems(prev => prev.map(i => i.status === 'OK' ? { ...i, reviewStatus: 'approved' } : i));
   }
 
+  // Approva in blocco gli ALERT ancora da verificare (rispetta il filtro; non tocca quelli già corretti o rifiutati)
+  const alertPending = useMemo(
+    () => tabItems.filter(i => i.status === 'ALERT' && i.reviewStatus === 'pending'),
+    [tabItems],
+  );
+  function approveAllAlert() {
+    const ids = new Set(alertPending.map(i => i.idElemento));
+    setItems(prev => prev.map(i => (ids.has(i.idElemento) ? { ...i, reviewStatus: 'approved' } : i)));
+  }
+
   // Save approved examples to Supabase and move on
   async function handleSave() {
     setSaving(true);
@@ -309,6 +319,18 @@ export function ReviewView({ user, onFinish, onSkip }: ReviewViewProps) {
           >
             <CheckCircle2 size={13} />
             Approva Tutti OK ({stats.ok.toLocaleString('it-IT')})
+          </button>
+        )}
+
+        {/* Bulk approve ALERT (voci che non tornano) */}
+        {tab === 'alert' && (
+          <button
+            onClick={approveAllAlert}
+            disabled={alertPending.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 border border-yellow-500/30 text-yellow-700 dark:text-yellow-400 text-xs font-bold transition-colors ml-2 disabled:opacity-40 disabled:hover:bg-yellow-500/15"
+          >
+            <CheckCircle2 size={13} />
+            Approva Tutti ALERT ({alertPending.length.toLocaleString('it-IT')})
           </button>
         )}
       </div>

@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentUser } from '../lib/currentUser';
 import { getAnthropicClient, CLAUDE_MODEL } from './claudeService';
 import type { PrezzarioRecord } from '../types';
+import { textOrFilters } from '../lib/search';
 
 export interface ConsultaImage {
   mediaType: 'image/jpeg';
@@ -137,6 +138,8 @@ export async function fileToConsultaImage(file: File): Promise<ConsultaImage> {
 // ── Ricerca nei prezzari ──────────────────────────────────────────────────────
 export interface SearchArgs {
   terms?: string[];
+  /** Testo libero: ogni parola viene cercata sia nel codice (tariffa) sia nella descrizione */
+  text?: string;
   codice?: string;
   prezzario?: string;
   limit?: number;
@@ -147,7 +150,8 @@ const escLike = (s: string) => s.replace(/[\\%_]/g, m => '\\' + m);
 export async function searchVoci(args: SearchArgs, prezzari: PrezzarioRecord[]): Promise<{ results?: VoceHit[]; error?: string }> {
   const terms = (args.terms ?? []).map(t => String(t).trim()).filter(Boolean).slice(0, 6);
   const codice = args.codice ? String(args.codice).trim() : '';
-  if (terms.length === 0 && !codice) {
+  const textFilters = textOrFilters(args.text ?? '');
+  if (terms.length === 0 && !codice && textFilters.length === 0) {
     return { error: 'Specifica almeno un termine (terms) o un codice.' };
   }
 
@@ -169,13 +173,17 @@ export async function searchVoci(args: SearchArgs, prezzari: PrezzarioRecord[]):
   if (ids) q = q.in('prezzario_id', ids);
   for (const t of terms) q = q.ilike('descrizione', `%${escLike(t)}%`);
   if (codice) q = q.ilike('codice', `%${escLike(codice)}%`);
+  for (const f of textFilters) q = q.or(f);
 
   const { data, error } = await q;
   if (error) return { error: 'Errore di ricerca: ' + error.message };
 
   const nameById = new Map(prezzari.map(p => [p.id, p.nome]));
+  const needle = (args.text ?? codice).trim().toLowerCase();
+  const rank = (cod: string) => { const x = String(cod).toLowerCase(); return x === needle ? 0 : x.startsWith(needle) ? 1 : 2; };
+  const rows = needle ? [...(data ?? [])].sort((a, b) => rank(a.codice) - rank(b.codice)) : (data ?? []);
   return {
-    results: (data ?? []).map(r => ({
+    results: rows.map(r => ({
       prezzarioId: r.prezzario_id,
       prezzario: nameById.get(r.prezzario_id) ?? String(r.prezzario_id),
       codice: r.codice,

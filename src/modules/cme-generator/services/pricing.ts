@@ -103,17 +103,35 @@ export interface VoceRow {
   elementIds: string[];
   /** Solo per kind 'risorsa': manodopera o noleggio preso dal prezzario dentro un'analisi NVP */
   tipoRisorsa?: RisorsaTipo;
+  /** Testi descrittivi distinti (normalizzati per il confronto) con cui compare la stessa tariffa */
+  descrizioni: string[];
+  /** Stessa tariffa con testi descrittivi diversi: la tariffa deve essere univoca */
+  conflitto?: boolean;
 }
 
 export type RisorsaTipo = 'Manodopera' | 'Noleggio';
 
 const prezzarioOf = (r: ResultadoItem, sub: SubItem) => sub.prezzarioNome || r.originePrezzo || '';
 
+// La TARIFFA (codice di prezzario o NVP) identifica la voce: stessa tariffa = stessa voce, anche con
+// testi descrittivi diversi (in quel caso si segnala un conflitto). Confronto senza maiuscole né spazi.
+export const normTariffa = (code: string | undefined | null) => String(code ?? '').toUpperCase().replace(/\s+/g, '');
+export const normText = (t: string | undefined | null) => String(t ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+export const isNvpSub = (sub: SubItem) => sub.status === 'NVP' || !!sub.nvpDetails;
+/** Tariffa NVP di una sottovoce (dopo una conversione in NVP il codice originale resta in codiceDeiOriginal) */
+export const nvpCodeOfSub = (sub: SubItem) =>
+  sub.codicePrezzarioTarget && sub.codicePrezzarioTarget !== 'NVP' ? sub.codicePrezzarioTarget : (sub.codiceDeiOriginal || '');
+/** Chiave di una NVP; senza tariffa si ripiega sulla descrizione */
+export const nvpKey = (code: string | undefined | null, fallbackText: string) =>
+  `N|${normTariffa(code) || '~' + normText(fallbackText)}`;
+
 export const subKey = (r: ResultadoItem, sub: SubItem) =>
-  `V|${sub.codicePrezzarioTarget}|${sub.descrizionePrezzarioTarget}|${prezzarioOf(r, sub)}`;
+  isNvpSub(sub) ? nvpKey(nvpCodeOfSub(sub), r.descrizioneElemento)
+    : `V|${normTariffa(sub.codicePrezzarioTarget)}|${normText(sub.descrizionePrezzarioTarget)}|${prezzarioOf(r, sub)}`;
 
 export const elementKey = (r: ResultadoItem) =>
-  `${r.status === 'NVP' ? 'N' : 'F'}|${r.tariffaOriginal || ''}|${r.descrizioneElemento}`;
+  r.status === 'NVP' ? nvpKey(r.tariffaOriginal, r.descrizioneElemento) : `F|${r.tariffaOriginal || ''}|${r.descrizioneElemento}`;
 
 // ── Risorse (manodopera / noleggi dal prezzario) dentro le analisi NVP ─────────
 export const risorsaKey = (tipo: RisorsaTipo, codice: string, prezzario?: string) => `R|${tipo}|${codice}|${prezzario ?? ''}`;
@@ -138,10 +156,12 @@ function risorseOf(d: NvpDetails): [RisorsaTipo, NvpRow[]][] {
 
 export function groupVoci(results: ResultadoItem[]): VoceRow[] {
   const map = new Map<string, VoceRow>();
-  const touch = (key: string, init: () => VoceRow, id: string, qty: number, amount: number) => {
+  const touch = (key: string, init: () => VoceRow, id: string, qty: number, amount: number, text = '') => {
     const row = map.get(key) ?? init();
     row.quantita += qty;
     row.importo += amount;
+    const t = normText(text);
+    if (t && !row.descrizioni.includes(t)) row.descrizioni.push(t);
     if (!row.elementIds.includes(id)) { row.elementIds.push(id); row.nElementi++; }
     map.set(key, row);
   };
@@ -154,14 +174,15 @@ export function groupVoci(results: ResultadoItem[]): VoceRow[] {
           subKey(r, sub),
           () => ({
             key: subKey(r, sub),
-            kind: sub.nvpDetails ? 'nvp' : 'voce',
-            codice: sub.codicePrezzarioTarget,
+            kind: isNvpSub(sub) ? 'nvp' : 'voce',
+            codice: isNvpSub(sub) ? nvpCodeOfSub(sub) : sub.codicePrezzarioTarget,
             descrizione: sub.descrizionePrezzarioTarget || sub.descrizioneDei,
             um: sub.unidade || r.unidade,
             prezzario: prezzarioOf(r, sub),
-            nElementi: 0, quantita: 0, valoreUnitario: sub.valoreUnitario, importo: 0, elementIds: [],
+            nElementi: 0, quantita: 0, valoreUnitario: sub.valoreUnitario, importo: 0, elementIds: [], descrizioni: [],
           }),
           r.idElemento, qty, qty * sub.valoreUnitario,
+          isNvpSub(sub) ? r.descrizioneElemento : (sub.descrizionePrezzarioTarget || sub.descrizioneDei),
         );
       }
     } else {
@@ -175,9 +196,9 @@ export function groupVoci(results: ResultadoItem[]): VoceRow[] {
           descrizione: r.descrizioneElemento,
           um: r.unidade,
           prezzario: isNvp ? 'NVP' : r.originePrezzo,
-          nElementi: 0, quantita: 0, valoreUnitario: r.valoreUnitario, importo: 0, elementIds: [],
+          nElementi: 0, quantita: 0, valoreUnitario: r.valoreUnitario, importo: 0, elementIds: [], descrizioni: [],
         }),
-        r.idElemento, r.quantitaElemento, r.total,
+        r.idElemento, r.quantitaElemento, r.total, r.descrizioneElemento,
       );
     }
   }
@@ -194,7 +215,7 @@ export function groupVoci(results: ResultadoItem[]): VoceRow[] {
             key,
             () => ({
               key, kind: 'risorsa', tipoRisorsa: tipo, codice: row.codice!, descrizione: row.descrizione, um: row.um,
-              prezzario: row.prezzario ?? '', nElementi: 0, quantita: 0, valoreUnitario: row.prezzoUnitario, importo: 0, elementIds: [],
+              prezzario: row.prezzario ?? '', nElementi: 0, quantita: 0, valoreUnitario: row.prezzoUnitario, importo: 0, elementIds: [], descrizioni: [],
             }),
             r.idElemento, qty, qty * row.prezzoUnitario,
           );
@@ -202,7 +223,20 @@ export function groupVoci(results: ResultadoItem[]): VoceRow[] {
       }
     }
   }
-  return [...map.values()];
+  const rows = [...map.values()];
+  // Tariffa univoca: la stessa tariffa con testi descrittivi diversi è un conflitto da segnalare
+  const byCode = new Map<string, VoceRow[]>();
+  for (const row of rows) {
+    if (row.kind !== 'voce' && row.kind !== 'nvp') continue;
+    const k = normTariffa(row.codice);
+    if (!k) continue;
+    byCode.set(k, [...(byCode.get(k) ?? []), row]);
+  }
+  for (const group of byCode.values()) {
+    const texts = new Set(group.flatMap(r => r.descrizioni));
+    if (texts.size > 1) group.forEach(r => { r.conflitto = true; });
+  }
+  return rows;
 }
 
 // ── Sostituzione / eliminazione di una voce in tutto il progetto ──────────────

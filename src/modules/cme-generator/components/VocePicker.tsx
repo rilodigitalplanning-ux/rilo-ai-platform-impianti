@@ -12,7 +12,6 @@ interface Props {
   onSelect: (v: VoceChoice) => void;
 }
 
-const CODE_LIKE = /^[A-Za-z0-9]+([.\-/][A-Za-z0-9]+)+$/;
 const fmt = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
 // Selettore di una voce di prezzario: scelta del prezzario + ricerca per testo o codice.
@@ -34,10 +33,8 @@ export const VocePicker: React.FC<Props> = ({ selected, onSelect, initialQuery =
       setLoading(true);
       setError(null);
       const nome = prezzari.find(p => String(p.id) === prezzarioId)?.nome;
-      const args = CODE_LIKE.test(q)
-        ? { codice: q, prezzario: nome, limit: 30 }
-        : { terms: q.split(/\s+/).filter(Boolean), prezzario: nome, limit: 30 };
-      const res = await searchVoci(args, prezzari);
+      // la tariffa e la descrizione vengono cercate insieme (ogni parola in uno dei due campi)
+      const res = await searchVoci({ text: q, prezzario: nome, limit: 30 }, prezzari);
       setLoading(false);
       if (res.error) { setError(res.error); setHits([]); } else setHits(res.results ?? []);
     }, 350);
@@ -59,7 +56,7 @@ export const VocePicker: React.FC<Props> = ({ selected, onSelect, initialQuery =
             autoFocus
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Cerca per descrizione (es. cavo FG16 4x6) o per codice…"
+            placeholder="Cerca per tariffa o descrizione (es. 015003 o cavo FG16 4x6)…"
             className={`${inputCls} w-full pl-9`}
           />
         </div>

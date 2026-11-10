@@ -102,7 +102,18 @@ export async function fillTemplateAndExport(
   // 2. Load into ExcelJS
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
-  
+
+  fillWorkbook(workbook, results, rawBimOffData);
+
+  // 9. Write and download
+  const outBuffer = await workbook.xlsx.writeBuffer();
+  saveAs(new Blob([outBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }), filename);
+}
+
+/** Riempie il foglio COMPUTO del workbook (template) con i risultati; importi come formule. */
+export function fillWorkbook(workbook: ExcelJS.Workbook, results: ResultadoItem[], rawBimOffData?: any[][]): void {
   if (workbook.worksheets.length === 0) {
     throw new Error('Il template Excel non contiene fogli di lavoro.');
   }
@@ -154,20 +165,36 @@ export async function fillTemplateAndExport(
     wsComputo.spliceRows(targetMeta.headerRowIdx + 1, rowsToDelete);
   }
 
-  // 7. Insert Rows with Styles
-  let insertIndex = targetMeta.headerRowIdx + 1;
-  
-  for (const [edificio, edGroup] of groups.entries()) {
-    if (edificio && edificio !== 'Generale') {
-      let edTotal = 0;
-      edGroup.forEach(lv => lv.forEach(items => items.forEach(i => edTotal += i.total)));
+  // 7. Insert Rows with Styles — importi come formule Excel (quantità × prezzo, subtotali con SUBTOTAL)
+  //    così, modificando una quantità o un prezzo nel file, tutti i totali si aggiornano.
+  const cQ = targetColMap['quantita'], cV = targetColMap['valore'], cT = targetColMap['totale'];
+  const useFormulas = !!(cQ && cV && cT);
+  const L = (c: number) => wsComputo!.getColumn(c).letter;
+  const setF = (row: ExcelJS.Row, col: number | undefined, formula: string, result: number) => {
+    if (col) row.getCell(col).value = useFormulas ? { formula, result } : result;
+  };
+  // Subtotale di un gruppo: somma delle sole righe "foglia" (SUBTOTAL ignora gli altri SUBTOTAL annidati)
+  const closeGroup = (rowNumber: number, startRow: number, endRow: number, value: number) => {
+    if (!cT) return;
+    const f = endRow >= startRow ? `SUBTOTAL(9,${L(cT)}${startRow}:${L(cT)}${endRow})` : '0';
+    wsComputo!.getRow(rowNumber).getCell(cT).value = useFormulas ? { formula: f, result: value } : value;
+  };
 
+  let insertIndex = targetMeta.headerRowIdx + 1;
+  const firstDataRow = insertIndex;
+
+  for (const [edificio, edGroup] of groups.entries()) {
+    let edHeader = 0;
+    const edStart = insertIndex;
+    let edTotal = 0;
+    edGroup.forEach(lv => lv.forEach(items => items.forEach(i => edTotal += i.total)));
+
+    if (edificio && edificio !== 'Generale') {
       const row = wsComputo.insertRow(insertIndex++, []);
+      edHeader = row.number;
       const colIdx = targetColMap['edificio'] ?? targetColMap['descrizione'] ?? 1;
       row.getCell(colIdx).value = edificio;
-      
-      if (targetColMap['totale']) row.getCell(targetColMap['totale']).value = edTotal;
-      
+
       // Dark Blue formatting
       row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; // Dark blue
       row.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -175,16 +202,17 @@ export async function fillTemplateAndExport(
     }
 
     for (const [livello, lvGroup] of edGroup.entries()) {
-      if (livello && livello !== 'N/A') {
-        let lvTotal = 0;
-        lvGroup.forEach(items => items.forEach(i => lvTotal += i.total));
+      let lvHeader = 0;
+      const lvStart = insertIndex;
+      let lvTotal = 0;
+      lvGroup.forEach(items => items.forEach(i => lvTotal += i.total));
 
+      if (livello && livello !== 'N/A') {
         const row = wsComputo.insertRow(insertIndex++, []);
+        lvHeader = row.number;
         const colIdx = targetColMap['livello'] ?? targetColMap['descrizione'] ?? 1;
         row.getCell(colIdx).value = targetColMap['livello'] ? livello : `  ${livello}`;
-        
-        if (targetColMap['totale']) row.getCell(targetColMap['totale']).value = lvTotal;
-        
+
         // Medium Blue formatting
         row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F75B5' } }; // Medium blue
         row.font = { color: { argb: 'FFFFFFFF' }, bold: true };
@@ -192,16 +220,17 @@ export async function fillTemplateAndExport(
       }
 
       for (const [zona, items] of lvGroup.entries()) {
-        if (zona && zona !== 'N/A') {
-          let znTotal = 0;
-          items.forEach(i => znTotal += i.total);
+        let znHeader = 0;
+        const znStart = insertIndex;
+        let znTotal = 0;
+        items.forEach(i => znTotal += i.total);
 
+        if (zona && zona !== 'N/A') {
           const row = wsComputo.insertRow(insertIndex++, []);
+          znHeader = row.number;
           const colIdx = targetColMap['zona'] ?? targetColMap['descrizione'] ?? 1;
           row.getCell(colIdx).value = targetColMap['zona'] ? zona : `    ${zona}`;
-          
-          if (targetColMap['totale']) row.getCell(targetColMap['totale']).value = znTotal;
-          
+
           // Light Blue formatting
           row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } }; // Light blue
           row.font = { color: { argb: 'FF000000' }, bold: true };
@@ -212,6 +241,7 @@ export async function fillTemplateAndExport(
         for (const item of items) {
           // Write main header row for the element (bold, WBS and Code empty)
           const row = wsComputo.insertRow(insertIndex++, []);
+          const parentNo = row.number;
 
           if (targetColMap['edificio']) row.getCell(targetColMap['edificio']).value = '';
           if (targetColMap['livello']) row.getCell(targetColMap['livello']).value = '';
@@ -222,14 +252,11 @@ export async function fillTemplateAndExport(
           if (targetColMap['tariffa']) row.getCell(targetColMap['tariffa']).value = '';
           if (targetColMap['descrizione']) row.getCell(targetColMap['descrizione']).value = item.descrizioneElemento;
           if (targetColMap['um']) row.getCell(targetColMap['um']).value = item.unidade || '';
-          if (targetColMap['quantita']) row.getCell(targetColMap['quantita']).value = item.quantitaElemento;
-          if (targetColMap['valore']) row.getCell(targetColMap['valore']).value = item.valoreUnitario;
-          if (targetColMap['totale']) row.getCell(targetColMap['totale']).value = item.total;
+          if (cQ) row.getCell(cQ).value = item.quantitaElemento; // dato di input: modificabile
           if (targetColMap['bim']) row.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
 
           // Make the main header row bold
           row.font = { bold: true };
-          row.commit();
 
           // Write all sub-items underneath
           const subItemsList = item.subItems && item.subItems.length > 0 ? item.subItems : [{
@@ -241,6 +268,7 @@ export async function fillTemplateAndExport(
             status: item.status
           }];
 
+          const firstChild = insertIndex;
           for (const sub of subItemsList) {
             const rowSub = wsComputo.insertRow(insertIndex++, []);
 
@@ -254,19 +282,49 @@ export async function fillTemplateAndExport(
             if (targetColMap['tariffa']) rowSub.getCell(targetColMap['tariffa']).value = sub.codicePrezzarioTarget;
             if (targetColMap['descrizione']) rowSub.getCell(targetColMap['descrizione']).value = sub.descrizionePrezzarioTarget;
             if (targetColMap['um']) rowSub.getCell(targetColMap['um']).value = sub.unidade || (sub as any).um || '';
-            const childQty = item.quantitaElemento * (sub.quantitaComposizione || 1);
+            const fattore = sub.quantitaComposizione || 1;
+            const childQty = item.quantitaElemento * fattore;
             const childTot = childQty * (sub.valoreUnitario || 0);
-            if (targetColMap['quantita']) rowSub.getCell(targetColMap['quantita']).value = childQty;
-            if (targetColMap['valore']) rowSub.getCell(targetColMap['valore']).value = sub.valoreUnitario;
-            if (targetColMap['totale']) rowSub.getCell(targetColMap['totale']).value = childTot;
+            // quantità = quantità dell'elemento × fattore della voce; prezzo = dato di input; importo = quantità × prezzo
+            setF(rowSub, cQ, fattore === 1 ? `${L(cQ || 1)}${parentNo}` : `${L(cQ || 1)}${parentNo}*${fattore}`, childQty);
+            if (cV) rowSub.getCell(cV).value = sub.valoreUnitario;
+            setF(rowSub, cT, `${L(cQ || 1)}${rowSub.number}*${L(cV || 1)}${rowSub.number}`, childTot);
             if (targetColMap['bim']) rowSub.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
 
             rowSub.commit();
           }
+          const lastChild = insertIndex - 1;
+
+          // Riga dell'elemento: importo = somma delle sue voci; prezzo unitario = importo / quantità
+          if (cT) setF(row, cT, `SUBTOTAL(9,${L(cT)}${firstChild}:${L(cT)}${lastChild})`, item.total);
+          if (cV && cT && cQ) setF(row, cV, `IF(${L(cQ)}${parentNo}=0,0,${L(cT)}${parentNo}/${L(cQ)}${parentNo})`, item.valoreUnitario);
+          row.commit();
         }
+
+        if (znHeader) closeGroup(znHeader, znStart + 1, insertIndex - 1, znTotal);
       }
+
+      if (lvHeader) closeGroup(lvHeader, lvStart + 1, insertIndex - 1, lvTotal);
     }
+
+    if (edHeader) closeGroup(edHeader, edStart + 1, insertIndex - 1, edTotal);
   }
+
+  // Totale generale (somma di tutte le righe foglia)
+  if (cT && insertIndex > firstDataRow) {
+    const grand = results.reduce((s, r) => s + r.total, 0);
+    const row = wsComputo.insertRow(insertIndex++, []);
+    row.getCell(targetColMap['descrizione'] ?? targetColMap['tariffa'] ?? 1).value = 'TOTALE GENERALE';
+    row.getCell(cT).value = useFormulas
+      ? { formula: `SUBTOTAL(9,${L(cT)}${firstDataRow}:${L(cT)}${insertIndex - 2})`, result: grand }
+      : grand;
+    row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    row.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+    row.commit();
+  }
+
+  // Excel ricalcola tutte le formule all'apertura
+  workbook.calcProperties = { ...(workbook.calcProperties ?? {}), fullCalcOnLoad: true };
 
   // 8. Inject the raw BIM OFF sheet back into the workbook
   if (rawBimOffData && rawBimOffData.length > 0) {
@@ -278,9 +336,4 @@ export async function fillTemplateAndExport(
     wsBimOff.addRows(rawBimOffData);
   }
 
-  // 9. Write and download
-  const outBuffer = await workbook.xlsx.writeBuffer();
-  saveAs(new Blob([outBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  }), filename);
 }

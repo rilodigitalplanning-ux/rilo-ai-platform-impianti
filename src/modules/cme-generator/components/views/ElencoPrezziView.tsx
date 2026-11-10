@@ -5,6 +5,7 @@ import { useCme } from '../../context/CmeContext';
 import { EmptyProjectNotice } from '../EmptyProjectNotice';
 import { ReplaceVoceDialog } from '../ReplaceVoceDialog';
 import { AddItemDialog } from '../AddItemDialog';
+import { matchesQuery } from '../../lib/search';
 import { groupVoci, deleteVoce, type VoceRow, type Changes } from '../../services/pricing';
 
 type Filter = 'tutte' | 'voce' | 'nvp' | 'risorsa' | 'nf';
@@ -24,10 +25,9 @@ export const ElencoPrezziView: React.FC = () => {
   const rows = useMemo(() => groupVoci(results).sort((a, b) => b.importo - a.importo), [results]);
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return rows.filter(r =>
       (filter === 'tutte' || r.kind === filter) &&
-      (!q || [r.codice, r.descrizione, r.prezzario].some(f => f.toLowerCase().includes(q))),
+      matchesQuery([r.codice, r.descrizione, r.prezzario], search),
     );
   }, [rows, search, filter]);
 
@@ -59,6 +59,9 @@ export const ElencoPrezziView: React.FC = () => {
         : r.kind === 'nf'
         ? <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-500">NON TROVATO</span>
         : null;
+  const conflictBadge = (r: VoceRow) => r.conflitto
+    ? <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/15 text-red-500 uppercase" title={'La tariffa deve essere univoca. Testi diversi:\n' + r.descrizioni.join('\n')}>tariffa con testi diversi</span>
+    : null;
 
   const nRisorse = rows.filter(r => r.kind === 'risorsa').length;
 
@@ -70,7 +73,7 @@ export const ElencoPrezziView: React.FC = () => {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Cerca codice, descrizione o prezzario…"
+            placeholder="Cerca tariffa, descrizione o prezzario…"
             className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-[12px] outline-none"
           />
         </div>
@@ -116,7 +119,7 @@ export const ElencoPrezziView: React.FC = () => {
               <tr key={r.key} className="border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
                 <td className="px-6 py-2.5 font-mono font-bold whitespace-nowrap">{r.codice || '—'}</td>
                 <td className="px-3 py-2.5 max-w-[420px]">
-                  <span className="line-clamp-2">{r.descrizione}</span> {kindBadge(r)}
+                  <span className="line-clamp-2">{r.descrizione}</span> {kindBadge(r)}{conflictBadge(r)}
                 </td>
                 <td className="px-3 py-2.5">{r.um}</td>
                 <td className="px-3 py-2.5 opacity-70 whitespace-nowrap">{r.prezzario}</td>
