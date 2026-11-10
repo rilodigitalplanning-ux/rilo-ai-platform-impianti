@@ -2,26 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { Search, Pencil, AlertTriangle, ChevronRight, ChevronDown, Copy } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useCme } from '../../context/CmeContext';
+import { fmt, fmtQty } from '../../lib/format';
 import { EmptyProjectNotice } from '../EmptyProjectNotice';
 import { NvpBuilderModal } from '../NvpBuilderModal';
-import { applyNvpToGroup, groupNvp, type NvpGroup } from '../../services/nvpGroups';
+import { applyNvpToGroup, groupNvp, nvpIssues, referenceDetails, type NvpGroup } from '../../services/nvpGroups';
 import { matchesQuery } from '../../lib/search';
 import type { NvpDetails } from '../../services/pricing';
 
-const fmt = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtQty = (v: number) => v.toLocaleString('it-IT', { maximumFractionDigits: 2 });
-
-// Analisi di partenza per la finestra di modifica: quella più diffusa tra gli elementi del gruppo
-function referenceDetails(g: NvpGroup): NvpDetails | undefined {
-  const counts = new Map<string, { n: number; d: NvpDetails }>();
-  for (const e of g.entries) {
-    if (!e.nvpDetails) continue;
-    const k = JSON.stringify(e.nvpDetails, (key, v) => (key === 'id' ? undefined : v));
-    const c = counts.get(k) ?? { n: 0, d: e.nvpDetails };
-    c.n++; counts.set(k, c);
-  }
-  return [...counts.values()].sort((a, b) => b.n - a.n)[0]?.d;
-}
 
 const Badge: React.FC<{ tone: 'amber' | 'red'; children: React.ReactNode; title?: string }> = ({ tone, children, title }) => (
   <span
@@ -50,7 +37,8 @@ export const AnalisiPrezziView: React.FC = () => {
   if (state.resultados.size === 0) return <EmptyProjectNotice title="Analisi Prezzi" />;
 
   const nMissing = groups.filter(g => g.senzaAnalisi > 0).length;
-  const nConflitti = groups.filter(g => g.conflitto).length;
+  const issues = nvpIssues(getAllEffectiveResults(), groups);
+  const nConflitti = issues.tariffe.length;
   const nAvvisi = groups.filter(g => g.conflitto || g.analisiDiverse).length;
   const nElementi = groups.reduce((s, g) => s + g.entries.length, 0);
   const nvpTotal = groups.reduce((s, g) => s + g.importo, 0);
@@ -100,6 +88,18 @@ export const AnalisiPrezziView: React.FC = () => {
         <div className="mx-6 mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[12px] text-red-600 dark:text-red-400 shrink-0">
           <p className="font-bold flex items-center gap-2"><AlertTriangle size={14} /> {nConflitti} tariff{nConflitti === 1 ? 'a' : 'e'} con testi descrittivi diversi</p>
           <p className="opacity-80 mt-1">La tariffa deve essere univoca: lo stesso codice identifica la stessa voce. Apri le righe segnalate per vedere gli elementi coinvolti e correggi il codice o la descrizione.</p>
+        </div>
+      )}
+
+      {issues.duplicati.length > 0 && (
+        <div className="mx-6 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-700 dark:text-amber-400 shrink-0">
+          <p className="font-bold flex items-center gap-2"><AlertTriangle size={14} /> {issues.duplicati.length} possibil{issues.duplicati.length === 1 ? 'e duplicato' : 'i duplicati'}: stessa descrizione con tariffe diverse</p>
+          <ul className="opacity-90 mt-1 list-disc pl-5">
+            {issues.duplicati.slice(0, 5).map(d => (
+              <li key={d.descrizione}>"{d.descrizione}" — {d.gruppi.map(g => g.codice || '—').join(', ')}</li>
+            ))}
+          </ul>
+          <p className="opacity-80 mt-1">Una NVP non può comparire con due tariffe: unifica il codice nei file Revit oppure correggilo e riesporta il modello.</p>
         </div>
       )}
 

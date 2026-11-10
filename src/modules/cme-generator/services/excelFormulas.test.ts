@@ -52,11 +52,11 @@ describe('Excel di esportazione con formule (modello SheetJS)', () => {
   });
 
   it('modificando una quantità o un prezzo, totali e riepiloghi si aggiornano', () => {
-    // Computo: WBS1,WBS2,IMPIANTO,CATEGORIA,DESCRIZIONE,QTD,UM,VALORE,TOTALE → QTD = F, VALORE = H, TOTALE = I
+    // Computo: WBS1,WBS2,Categoria,DESCRIZIONE,QTD,UM,VALORE,TOTALE → QTD = E, VALORE = G, TOTALE = H
     const edited = XLSX.utils.book_new();
     for (const name of wb.SheetNames) edited.Sheets[name] = JSON.parse(JSON.stringify(wb.Sheets[name]));
     edited.SheetNames = [...wb.SheetNames];
-    edited.Sheets.Computo.F2.v = 20; // quantità del primo elemento: da 2 a 20
+    edited.Sheets.Computo.E2.v = 20; // quantità del primo elemento: da 2 a 20
     const get2 = (sheet: string, addr: string): CellInfo | undefined => {
       const c = edited.Sheets[sheet]?.[addr];
       return c ? { f: c.f, v: c.v as any } : undefined;
@@ -64,7 +64,7 @@ describe('Excel di esportazione con formule (modello SheetJS)', () => {
     const ev2 = createEvaluator(get2, 'Computo');
     const expected = grand(items) - items[0].total + items[0].valoreUnitario * 20;
     const lastRow = XLSX.utils.decode_range(edited.Sheets.Computo['!ref'] as string).e.r + 1;
-    expect(ev2.cellValue('Computo', `I${lastRow}`)).toBeCloseTo(expected, 2);
+    expect(ev2.cellValue('Computo', `H${lastRow}`)).toBeCloseTo(expected, 2);
     // Categoria EVAC (riga 2 del foglio Categoria) e totale del Dashboard seguono la modifica
     const evac = [...Array(3)].map((_, i) => ev2.cellValue('Categoria', `A${i + 2}`) === 'EVAC' ? ev2.cellValue('Categoria', `C${i + 2}`) : 0).reduce((s: number, x) => s + Number(x), 0);
     expect(evac).toBeCloseTo(items[0].valoreUnitario * 20 + items[1].total, 2);

@@ -8,6 +8,7 @@ import { FileSpreadsheet, ChevronRight, AlertCircle, Database, Settings } from '
 import { motion, AnimatePresence } from 'motion/react';
 import { parseRevitCsv } from '../services/csvParser';
 import { parseRevitExcel } from '../services/excelParser';
+import { modelNameFromFile, modelSlug } from '../services/addModel';
 import { useCme } from '../context/CmeContext';
 import type { PrezzarioRecord, Elemento } from '../types';
 import type { UserProfile } from '../lib/currentUser';
@@ -43,6 +44,33 @@ export function SetupView({
 
   // ── CSV da Revit ────────────────────────────────────────────────────────────
 
+  // Più file insieme (es. FM e LUCE): ogni file è un modello, con nome proposto dal nome del file
+  async function handleFilesUpload(files: File[]) {
+    if (files.length === 1) return handleCsvUpload(files[0]);
+    setError(null); setSuccess(null);
+    try {
+      const all: Elemento[] = [];
+      const names: string[] = [];
+      const warnings: string[] = [];
+      for (const file of files) {
+        if (!file.name.toLowerCase().endsWith('.xlsx')) throw new Error(`${file.name}: per unire più modelli servono file Excel (.xlsx).`);
+        const res = await parseRevitExcel(await file.arrayBuffer());
+        if (!res.elementos.some(e => e.componenti)) throw new Error(`${file.name}: non è una scheda CME (colonne RDP_WBS e CME_ELE).`);
+        let nome = modelNameFromFile(file.name);
+        if (names.some(n => modelSlug(n) === modelSlug(nome))) nome = `${nome} ${names.length + 1}`;
+        names.push(nome);
+        const prefix = modelSlug(nome);
+        all.push(...res.elementos.map(e => ({ ...e, idUnico: `${prefix}~${e.idUnico}`, modello: nome })));
+        warnings.push(...res.warnings);
+      }
+      dispatch({ type: 'SET_ELEMENTOS', payload: all });
+      setSuccess(`✓ ${all.length} elementi da ${files.length} modelli: ${names.join(', ')}`);
+      if (warnings.length > 0) setError(`Avvisi: ${warnings.slice(0, 3).join(', ')}`);
+    } catch (e: any) {
+      setError(`Errore durante la lettura dei file: ${e.message}`);
+    }
+  }
+
   async function handleCsvUpload(file: File) {
     setError(null); setSuccess(null);
     try {
@@ -76,8 +104,8 @@ export function SetupView({
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleCsvUpload(file);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) void handleFilesUpload(files);
   }
 
   return (
@@ -113,13 +141,13 @@ export function SetupView({
         >
           <FileSpreadsheet size={36} className="text-gray-300 dark:text-white/20 group-hover:text-[#E94560]/60 transition-colors" />
           <div className="text-center">
-            <p className="text-gray-600 dark:text-white/60 text-sm">Trascina o clicca per selezionare il file da Revit (.csv o .xlsx)</p>
+            <p className="text-gray-600 dark:text-white/60 text-sm">Trascina o clicca per selezionare il file da Revit (.csv o .xlsx); più file .xlsx = più modelli (es. FM e LUCE)</p>
             {state.elementos.length > 0 && (
               <p className="text-[#E94560] font-bold mt-2">✓ {state.elementos.length} elementi caricati</p>
             )}
           </div>
-          <input ref={csvRef} type="file" accept=".csv,.xlsx" className="hidden"
-            onChange={e => e.target.files?.[0] && handleCsvUpload(e.target.files[0])} />
+          <input ref={csvRef} type="file" accept=".csv,.xlsx" multiple className="hidden"
+            onChange={e => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) void handleFilesUpload(f); }} />
         </div>
       </section>
 

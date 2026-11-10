@@ -1,5 +1,6 @@
 import type { Elemento, PrezzarioVoce, ResultadoItem, SubItem } from '../types';
-import { computeNvpTotal, recomputeResult, type NvpDetails } from './pricing';
+import { deepClone } from '../lib/util';
+import { computeNvpTotal, normTariffa, recomputeResult, type NvpDetails } from './pricing';
 
 export interface NvpAnalysis {
   valoreUnitario: number;
@@ -7,10 +8,8 @@ export interface NvpAnalysis {
   nvpDetails: NvpDetails | null;
 }
 
-export const nvpCodeKey = (codice: string) => codice.trim().toUpperCase();
+export const nvpCodeKey = (codice: string) => normTariffa(codice);
 export const voceKey = (codice: string) => codice.trim().toLowerCase();
-
-const clone = <T,>(v: T): T => (v == null ? v : JSON.parse(JSON.stringify(v)));
 
 // Codici NVP distinti (con descrizione di un elemento d'esempio e numero di elementi) da chiedere all'utente
 export function collectNvpCodes(elementi: Elemento[]): { codice: string; descrizione: string; nElementi: number }[] {
@@ -42,6 +41,7 @@ export function buildResultFromComponenti(
     zona: el.zona,
     wbs4: el.wbs4,
     wbs: el.wbs,
+    modello: el.modello,
     descrizioneElemento: el.descricao,
     quantitaElemento: el.quantita,
     unidade: el.unidade || '',
@@ -68,7 +68,7 @@ export function buildResultFromComponenti(
   // Elemento che è interamente una NVP (un solo codice, fattore 1)
   if (comps.length === 1 && comps[0].isNvp && comps[0].fattore === 1) {
     const a = nvps.get(nvpCodeKey(comps[0].codice));
-    const details = clone(a?.nvpDetails ?? null);
+    const details = deepClone(a?.nvpDetails ?? null);
     const r: ResultadoItem = {
       ...base,
       categoria: el.categoriaCme || 'NVP',
@@ -86,7 +86,7 @@ export function buildResultFromComponenti(
   const subItems: SubItem[] = comps.map(c => {
     if (c.isNvp) {
       const a = nvps.get(nvpCodeKey(c.codice));
-      const details = clone(a?.nvpDetails ?? null);
+      const details = deepClone(a?.nvpDetails ?? null);
       return {
         codiceDeiOriginal: c.codice,
         descrizioneDei: el.descricao,

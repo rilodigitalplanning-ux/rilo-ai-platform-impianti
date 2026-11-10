@@ -1,5 +1,5 @@
 // src/modules/cmeGenerator/pages/ProcessingView.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { buildNvpResult } from '../services/claudeService';
@@ -10,9 +10,7 @@ import { buildResultFromComponenti, collectNvpCodes, nvpCodeKey, voceKey, type N
 import type { Elemento, PrezzarioVoce, ResultadoItem } from '../types';
 
 interface ProcessingViewProps {
-  refPrezzarioId: number;
   targetPrezzarioId: number;
-  refPrezzarioName: string;
   targetPrezzarioName: string;
   onDone: () => void;
 }
@@ -23,9 +21,7 @@ interface NvpModalState {
 }
 
 export function ProcessingView({
-  refPrezzarioId,
   targetPrezzarioId,
-  refPrezzarioName,
   targetPrezzarioName,
   onDone,
 }: ProcessingViewProps) {

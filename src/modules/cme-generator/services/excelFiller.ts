@@ -6,6 +6,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import type { ResultadoItem } from '../types';
+import { activeItems, defaultHierarchy, dimensionValue, type HierarchyItem } from '../lib/hierarchy';
 import { downloadTemplateBuffer } from './templateService';
 
 /**
@@ -83,13 +84,40 @@ function detectColumns(worksheet: ExcelJS.Worksheet): { headerRowIdx: number; ma
   };
 }
 
+// Colonna del template per ogni livello della gerarchia: intestazione uguale al nome del livello (o al suo
+// identificativo, es. WBS2); per i livelli predefiniti anche i nomi storici (Edificio, Livello, Zona, Categoria).
+const LEGACY_HEADERS: Record<string, string[]> = {
+  wbs1: ['EDIFICIO', 'WBS 1', 'WBSS_1'], wbs2: ['LIVELLO', 'PISO', 'WBS 2', 'WBSS_2'], wbs3: ['ZONA', 'WBS 3', 'WBSS_3'], cat: ['CATEGORIA'],
+};
+function findHierarchyColumns(ws: ExcelJS.Worksheet, headerRowIdx: number, items: HierarchyItem[]): Map<string, number> {
+  const header = ws.getRow(headerRowIdx);
+  const cells: { col: number; text: string }[] = [];
+  header.eachCell((cell, col) => { const t = String(cell.value ?? '').toUpperCase().trim(); if (t) cells.push({ col, text: t }); });
+  const used = new Set<number>();
+  const out = new Map<string, number>();
+  const find = (id: string, pred: (t: string) => boolean) => {
+    const hit = cells.find(c => !used.has(c.col) && pred(c.text));
+    if (hit) { used.add(hit.col); out.set(id, hit.col); return true; }
+    return false;
+  };
+  for (const it of items) { // 1) nome del livello
+    find(it.id, t => t === it.label.toUpperCase().trim());
+  }
+  for (const it of items) { // 2) identificativo (WBS2) e nomi storici
+    if (out.has(it.id)) continue;
+    if (!find(it.id, t => t === it.id.toUpperCase())) find(it.id, t => (LEGACY_HEADERS[it.id] ?? []).includes(t));
+  }
+  return out;
+}
+
 /**
  * Groups items and inserts them into the template using ExcelJS (with styles).
  */
 export async function fillTemplateAndExport(
   results: ResultadoItem[],
   filename = 'Computo_Metrico_Gerado.xlsx',
-  rawBimOffData?: any[][]
+  rawBimOffData?: any[][],
+  hierarchy?: HierarchyItem[],
 ): Promise<void> {
   // 1. Fetch template buffer
   let buffer: ArrayBuffer;
@@ -103,7 +131,7 @@ export async function fillTemplateAndExport(
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer);
 
-  fillWorkbook(workbook, results, rawBimOffData);
+  fillWorkbook(workbook, results, rawBimOffData, hierarchy);
 
   // 9. Write and download
   const outBuffer = await workbook.xlsx.writeBuffer();
@@ -113,7 +141,7 @@ export async function fillTemplateAndExport(
 }
 
 /** Riempie il foglio COMPUTO del workbook (template) con i risultati; importi come formule. */
-export function fillWorkbook(workbook: ExcelJS.Workbook, results: ResultadoItem[], rawBimOffData?: any[][]): void {
+export function fillWorkbook(workbook: ExcelJS.Workbook, results: ResultadoItem[], rawBimOffData?: any[][], hierarchy?: HierarchyItem[]): void {
   if (workbook.worksheets.length === 0) {
     throw new Error('Il template Excel non contiene fogli di lavoro.');
   }
@@ -141,25 +169,30 @@ export function fillWorkbook(workbook: ExcelJS.Workbook, results: ResultadoItem[
   // The 'results' array already contains both BIM ON and BIM OFF items 
   // extracted from the uploaded Excel file.
 
-  // 5. Group results hierarchically: Edificio -> Livello -> Zona
-  const groups = new Map<string, Map<string, Map<string, ResultadoItem[]>>>();
-  for (const item of results) {
-    const ed = item.edificio || 'Generale';
-    const lv = item.livello || 'N/A';
-    const zn = item.zona || 'N/A';
+  // 5. Gerarchia del progetto: livelli attivi nell'ordine configurato (nomi personalizzati inclusi)
+  const hierItems = activeItems(hierarchy ?? defaultHierarchy(results));
+  const hierCol = findHierarchyColumns(wsComputo, targetMeta.headerRowIdx, hierItems);
 
-    if (!groups.has(ed)) groups.set(ed, new Map());
-    const edGroup = groups.get(ed)!;
-    if (!edGroup.has(lv)) edGroup.set(lv, new Map());
-    const lvGroup = edGroup.get(lv)!;
-    if (!lvGroup.has(zn)) lvGroup.set(zn, []);
-    lvGroup.get(zn)!.push(item);
+  interface GroupNode { name: string; level?: HierarchyItem; children: Map<string, GroupNode>; items: ResultadoItem[] }
+  const root: GroupNode = { name: '', children: new Map(), items: [] };
+  for (const item of results) {
+    let node = root;
+    for (const it of hierItems) {
+      const v = dimensionValue(item, it.id);
+      if (!v) continue;
+      const k = `${it.id}:${v}`;
+      if (!node.children.has(k)) node.children.set(k, { name: v, level: it, children: new Map(), items: [] });
+      node = node.children.get(k)!;
+    }
+    node.items.push(item);
   }
+  const sumNode = (n: GroupNode): number =>
+    n.items.reduce((s, i) => s + i.total, 0) + [...n.children.values()].reduce((s, c) => s + sumNode(c), 0);
 
   // 6. Clear existing placeholder rows beneath the header
   const totalRows = wsComputo.rowCount;
   if (totalRows > targetMeta.headerRowIdx) {
-    // Delete rows starting from the bottom to avoid shifting issues, 
+    // Delete rows starting from the bottom to avoid shifting issues,
     // or simply delete count rows from headerRowIdx + 1
     const rowsToDelete = totalRows - targetMeta.headerRowIdx;
     wsComputo.spliceRows(targetMeta.headerRowIdx + 1, rowsToDelete);
@@ -180,135 +213,82 @@ export function fillWorkbook(workbook: ExcelJS.Workbook, results: ResultadoItem[
     wsComputo!.getRow(rowNumber).getCell(cT).value = useFormulas ? { formula: f, result: value } : value;
   };
 
+  // Colori dei gruppi per profondità (blu scuro → chiaro)
+  const GROUP_FILL = ['FF1F4E78', 'FF2F75B5', 'FFD9E1F2', 'FFEAF0F9', 'FFF4F7FC'];
+
   let insertIndex = targetMeta.headerRowIdx + 1;
   const firstDataRow = insertIndex;
 
-  for (const [edificio, edGroup] of groups.entries()) {
-    let edHeader = 0;
-    const edStart = insertIndex;
-    let edTotal = 0;
-    edGroup.forEach(lv => lv.forEach(items => items.forEach(i => edTotal += i.total)));
+  const writeElement = (item: ResultadoItem) => {
+    // Riga principale dell'elemento (grassetto, livelli e codice vuoti)
+    const row = wsComputo!.insertRow(insertIndex++, []);
+    const parentNo = row.number;
 
-    if (edificio && edificio !== 'Generale') {
-      const row = wsComputo.insertRow(insertIndex++, []);
-      edHeader = row.number;
-      const colIdx = targetColMap['edificio'] ?? targetColMap['descrizione'] ?? 1;
-      row.getCell(colIdx).value = edificio;
+    for (const it of hierItems) { const c = hierCol.get(it.id); if (c) row.getCell(c).value = ''; }
+    if (targetColMap['tariffa']) row.getCell(targetColMap['tariffa']).value = '';
+    if (targetColMap['descrizione']) row.getCell(targetColMap['descrizione']).value = item.descrizioneElemento;
+    if (targetColMap['um']) row.getCell(targetColMap['um']).value = item.unidade || '';
+    if (cQ) row.getCell(cQ).value = item.quantitaElemento; // dato di input: modificabile
+    if (targetColMap['bim']) row.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
+    row.font = { bold: true };
 
-      // Dark Blue formatting
-      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } }; // Dark blue
-      row.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+    const subItemsList = item.subItems && item.subItems.length > 0 ? item.subItems : [{
+      codicePrezzarioTarget: item.tariffaOriginal || item.idElemento,
+      descrizionePrezzarioTarget: item.descrizioneElemento,
+      unidade: item.unidade || '',
+      quantitaComposizione: 1,
+      valoreUnitario: item.valoreUnitario,
+      status: item.status
+    }];
+
+    const firstChild = insertIndex;
+    for (const sub of subItemsList) {
+      const rowSub = wsComputo!.insertRow(insertIndex++, []);
+
+      // livelli della gerarchia valorizzati sulle righe delle voci
+      for (const it of hierItems) { const c = hierCol.get(it.id); if (c) rowSub.getCell(c).value = dimensionValue(item, it.id); }
+
+      if (targetColMap['tariffa']) rowSub.getCell(targetColMap['tariffa']).value = sub.codicePrezzarioTarget;
+      if (targetColMap['descrizione']) rowSub.getCell(targetColMap['descrizione']).value = sub.descrizionePrezzarioTarget;
+      if (targetColMap['um']) rowSub.getCell(targetColMap['um']).value = sub.unidade || (sub as any).um || '';
+      const fattore = sub.quantitaComposizione || 1;
+      const childQty = item.quantitaElemento * fattore;
+      const childTot = childQty * (sub.valoreUnitario || 0);
+      // quantità = quantità dell'elemento × fattore della voce; prezzo = dato di input; importo = quantità × prezzo
+      setF(rowSub, cQ, fattore === 1 ? `${L(cQ || 1)}${parentNo}` : `${L(cQ || 1)}${parentNo}*${fattore}`, childQty);
+      if (cV) rowSub.getCell(cV).value = sub.valoreUnitario;
+      setF(rowSub, cT, `${L(cQ || 1)}${rowSub.number}*${L(cV || 1)}${rowSub.number}`, childTot);
+      if (targetColMap['bim']) rowSub.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
+
+      rowSub.commit();
+    }
+    const lastChild = insertIndex - 1;
+
+    // Riga dell'elemento: importo = somma delle sue voci; prezzo unitario = importo / quantità
+    if (cT) setF(row, cT, `SUBTOTAL(9,${L(cT)}${firstChild}:${L(cT)}${lastChild})`, item.total);
+    if (cV && cT && cQ) setF(row, cV, `IF(${L(cQ)}${parentNo}=0,0,${L(cT)}${parentNo}/${L(cQ)}${parentNo})`, item.valoreUnitario);
+    row.commit();
+  };
+
+  // Gruppi annidati, uno per livello della gerarchia, con subtotale
+  const writeNode = (node: GroupNode, depth: number) => {
+    let header = 0;
+    const start = insertIndex;
+    if (depth > 0 && node.level) {
+      const item = node.level;
+      const row = wsComputo!.insertRow(insertIndex++, []);
+      header = row.number;
+      const c = hierCol.get(item.id);
+      row.getCell(c ?? targetColMap['descrizione'] ?? 1).value = c ? node.name : `${'  '.repeat(depth - 1)}${node.name}`;
+      row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GROUP_FILL[Math.min(depth - 1, GROUP_FILL.length - 1)] } };
+      row.font = { color: { argb: depth <= 2 ? 'FFFFFFFF' : 'FF000000' }, bold: true };
       row.commit();
     }
-
-    for (const [livello, lvGroup] of edGroup.entries()) {
-      let lvHeader = 0;
-      const lvStart = insertIndex;
-      let lvTotal = 0;
-      lvGroup.forEach(items => items.forEach(i => lvTotal += i.total));
-
-      if (livello && livello !== 'N/A') {
-        const row = wsComputo.insertRow(insertIndex++, []);
-        lvHeader = row.number;
-        const colIdx = targetColMap['livello'] ?? targetColMap['descrizione'] ?? 1;
-        row.getCell(colIdx).value = targetColMap['livello'] ? livello : `  ${livello}`;
-
-        // Medium Blue formatting
-        row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2F75B5' } }; // Medium blue
-        row.font = { color: { argb: 'FFFFFFFF' }, bold: true };
-        row.commit();
-      }
-
-      for (const [zona, items] of lvGroup.entries()) {
-        let znHeader = 0;
-        const znStart = insertIndex;
-        let znTotal = 0;
-        items.forEach(i => znTotal += i.total);
-
-        if (zona && zona !== 'N/A') {
-          const row = wsComputo.insertRow(insertIndex++, []);
-          znHeader = row.number;
-          const colIdx = targetColMap['zona'] ?? targetColMap['descrizione'] ?? 1;
-          row.getCell(colIdx).value = targetColMap['zona'] ? zona : `    ${zona}`;
-
-          // Light Blue formatting
-          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } }; // Light blue
-          row.font = { color: { argb: 'FF000000' }, bold: true };
-          row.commit();
-        }
-
-        // Data Rows
-        for (const item of items) {
-          // Write main header row for the element (bold, WBS and Code empty)
-          const row = wsComputo.insertRow(insertIndex++, []);
-          const parentNo = row.number;
-
-          if (targetColMap['edificio']) row.getCell(targetColMap['edificio']).value = '';
-          if (targetColMap['livello']) row.getCell(targetColMap['livello']).value = '';
-          if (targetColMap['zona']) row.getCell(targetColMap['zona']).value = '';
-          if (targetColMap['tipoImpianto']) row.getCell(targetColMap['tipoImpianto']).value = item.tipoImpianto || '';
-          if (targetColMap['categoria']) row.getCell(targetColMap['categoria']).value = item.categoria;
-
-          if (targetColMap['tariffa']) row.getCell(targetColMap['tariffa']).value = '';
-          if (targetColMap['descrizione']) row.getCell(targetColMap['descrizione']).value = item.descrizioneElemento;
-          if (targetColMap['um']) row.getCell(targetColMap['um']).value = item.unidade || '';
-          if (cQ) row.getCell(cQ).value = item.quantitaElemento; // dato di input: modificabile
-          if (targetColMap['bim']) row.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
-
-          // Make the main header row bold
-          row.font = { bold: true };
-
-          // Write all sub-items underneath
-          const subItemsList = item.subItems && item.subItems.length > 0 ? item.subItems : [{
-            codicePrezzarioTarget: item.tariffaOriginal || item.idElemento,
-            descrizionePrezzarioTarget: item.descrizioneElemento,
-            unidade: item.unidade || '',
-            quantitaComposizione: 1,
-            valoreUnitario: item.valoreUnitario,
-            status: item.status
-          }];
-
-          const firstChild = insertIndex;
-          for (const sub of subItemsList) {
-            const rowSub = wsComputo.insertRow(insertIndex++, []);
-
-            // WBS columns filled with coordinates
-            if (targetColMap['edificio']) rowSub.getCell(targetColMap['edificio']).value = item.edificio;
-            if (targetColMap['livello']) rowSub.getCell(targetColMap['livello']).value = item.livello;
-            if (targetColMap['zona']) rowSub.getCell(targetColMap['zona']).value = item.zona;
-            if (targetColMap['tipoImpianto']) rowSub.getCell(targetColMap['tipoImpianto']).value = item.tipoImpianto || '';
-            if (targetColMap['categoria']) rowSub.getCell(targetColMap['categoria']).value = item.categoria;
-
-            if (targetColMap['tariffa']) rowSub.getCell(targetColMap['tariffa']).value = sub.codicePrezzarioTarget;
-            if (targetColMap['descrizione']) rowSub.getCell(targetColMap['descrizione']).value = sub.descrizionePrezzarioTarget;
-            if (targetColMap['um']) rowSub.getCell(targetColMap['um']).value = sub.unidade || (sub as any).um || '';
-            const fattore = sub.quantitaComposizione || 1;
-            const childQty = item.quantitaElemento * fattore;
-            const childTot = childQty * (sub.valoreUnitario || 0);
-            // quantità = quantità dell'elemento × fattore della voce; prezzo = dato di input; importo = quantità × prezzo
-            setF(rowSub, cQ, fattore === 1 ? `${L(cQ || 1)}${parentNo}` : `${L(cQ || 1)}${parentNo}*${fattore}`, childQty);
-            if (cV) rowSub.getCell(cV).value = sub.valoreUnitario;
-            setF(rowSub, cT, `${L(cQ || 1)}${rowSub.number}*${L(cV || 1)}${rowSub.number}`, childTot);
-            if (targetColMap['bim']) rowSub.getCell(targetColMap['bim']).value = item.bimStatus || 'BIM ON';
-
-            rowSub.commit();
-          }
-          const lastChild = insertIndex - 1;
-
-          // Riga dell'elemento: importo = somma delle sue voci; prezzo unitario = importo / quantità
-          if (cT) setF(row, cT, `SUBTOTAL(9,${L(cT)}${firstChild}:${L(cT)}${lastChild})`, item.total);
-          if (cV && cT && cQ) setF(row, cV, `IF(${L(cQ)}${parentNo}=0,0,${L(cT)}${parentNo}/${L(cQ)}${parentNo})`, item.valoreUnitario);
-          row.commit();
-        }
-
-        if (znHeader) closeGroup(znHeader, znStart + 1, insertIndex - 1, znTotal);
-      }
-
-      if (lvHeader) closeGroup(lvHeader, lvStart + 1, insertIndex - 1, lvTotal);
-    }
-
-    if (edHeader) closeGroup(edHeader, edStart + 1, insertIndex - 1, edTotal);
-  }
+    node.items.forEach(writeElement);
+    for (const child of node.children.values()) writeNode(child, depth + 1);
+    if (header) closeGroup(header, start + 1, insertIndex - 1, sumNode(node));
+  };
+  writeNode(root, 0);
 
   // Totale generale (somma di tutte le righe foglia)
   if (cT && insertIndex > firstDataRow) {

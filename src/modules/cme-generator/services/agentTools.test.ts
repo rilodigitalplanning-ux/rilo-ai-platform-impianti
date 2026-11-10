@@ -127,3 +127,25 @@ describe('annulla / ripeti', () => {
     expect(s.redoStack).toHaveLength(0);
   });
 });
+
+describe('gerarchia nello stato del progetto', () => {
+  const base = (): CmeState => ({
+    elementos: [], resultados: new Map(), overrides: new Map(), chatHistory: new Map(),
+    isProcessing: false, progress: { current: 0, total: 0, message: '' }, dirty: false,
+  });
+  const h = [{ id: 'cat', label: 'Impianto', enabled: true }, { id: 'wbs1', label: 'Edificio', enabled: true }];
+  it('si imposta, segna il progetto da salvare, si ricarica col progetto e non passa ad altri progetti', () => {
+    let s = cmeReducer(base(), { type: 'SET_HIERARCHY', payload: h });
+    expect(s.hierarchy).toEqual(h);
+    expect(s.dirty).toBe(true);
+    // un altro progetto caricato non eredita la gerarchia
+    s = cmeReducer(s, { type: 'LOAD_PROJECT', payload: { id: 'p2', name: 'Altro', elementos: [], resultados: [], overrides: [] } });
+    expect(s.hierarchy).toBeUndefined();
+    // il progetto salvato con la sua gerarchia la ritrova
+    s = cmeReducer(s, { type: 'LOAD_PROJECT', payload: { id: 'p1', name: 'Uno', elementos: [], resultados: [], overrides: [], hierarchy: h } });
+    expect(s.hierarchy).toEqual(h);
+    // nuovo progetto / importazione: gerarchia predefinita
+    expect(cmeReducer(s, { type: 'RESET' }).hierarchy).toBeUndefined();
+    expect(cmeReducer(s, { type: 'IMPORT_PROJECT', payload: { name: 'X', resultados: [] } }).hierarchy).toBeUndefined();
+  });
+});

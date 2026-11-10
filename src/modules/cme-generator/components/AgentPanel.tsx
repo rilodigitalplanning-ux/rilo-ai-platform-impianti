@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Sparkles, Undo2, Redo2, Trash2, Loader2, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { eur } from '../lib/format';
 import { useCme } from '../context/CmeContext';
 import { listPrezzarios } from '../services/prezzarioService';
 import { runAgent } from '../services/agentService';
 import type { AgentMessage } from '../types';
 
-const eur = (v: number) => `€ ${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const SUGGESTIONS = [
   'Mostrami il totale per categoria',
@@ -19,7 +19,7 @@ const SUGGESTIONS = [
 // Ogni comando è un'unica operazione annullabile (Annulla / Ripeti).
 export const AgentPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { moduleTheme, showToast } = useApp();
-  const { state, dispatch, getAllEffectiveResults } = useCme();
+  const { state, dispatch, getAllEffectiveResults, hierarchy } = useCme();
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -43,7 +43,7 @@ export const AgentPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     try {
       const prezzari = await listPrezzarios().catch(() => []);
       const run = await runAgent({
-        history, text, results: getAllEffectiveResults(), projectName: state.projectName, prezzari, onStatus: setStatus,
+        history, text, results: getAllEffectiveResults(), projectName: state.projectName, hierarchy, prezzari, onStatus: setStatus,
       });
       const n = run.changes.upsert.length, d = run.changes.remove.length;
       if (n + d > 0) dispatch({ type: 'APPLY_AGENT_CHANGES', payload: { ...run.changes, label: text.slice(0, 60) } });

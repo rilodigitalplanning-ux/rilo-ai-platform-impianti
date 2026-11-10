@@ -2,6 +2,7 @@
 // di costo per tutti gli elementi che la usano. Una tariffa con testi descrittivi diversi è un conflitto.
 import type { ResultadoItem } from '../types';
 import { wbsLevels } from '../lib/wbs';
+import { deepClone } from '../lib/util';
 import {
   isNvpSub, normText, nvpCodeOfSub, nvpKey, updateNvpElement, updateNvpSub, type Changes, type NvpDetails,
 } from './pricing';
@@ -83,8 +84,6 @@ export function groupNvp(results: ResultadoItem[]): NvpGroup[] {
   return [...groups.values()].sort((a, b) => a.codice.localeCompare(b.codice, 'it', { numeric: true }));
 }
 
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
-
 /** Applica la stessa analisi a tutti gli elementi del gruppo (un'unica modifica, annullabile) */
 export function applyNvpToGroup(group: NvpGroup, details: NvpDetails, fonte: string): Changes {
   const current = new Map<string, ResultadoItem>();
@@ -92,8 +91,66 @@ export function applyNvpToGroup(group: NvpGroup, details: NvpDetails, fonte: str
     const r = current.get(e.result.idElemento) ?? e.result;
     current.set(
       r.idElemento,
-      e.subIndex === null ? updateNvpElement(r, clone(details), fonte) : updateNvpSub(r, e.subIndex, clone(details), fonte),
+      e.subIndex === null ? updateNvpElement(r, deepClone(details), fonte) : updateNvpSub(r, e.subIndex, deepClone(details), fonte),
     );
   }
   return { upsert: [...current.values()], remove: [] };
+}
+
+/** Analisi di partenza di un gruppo: quella più diffusa tra i suoi elementi */
+export function referenceDetails(g: NvpGroup): NvpDetails | undefined {
+  const counts = new Map<string, { n: number; d: NvpDetails }>();
+  for (const e of g.entries) {
+    if (!e.nvpDetails) continue;
+    const k = signature(e.nvpDetails);
+    const c = counts.get(k) ?? { n: 0, d: e.nvpDetails };
+    c.n++; counts.set(k, c);
+  }
+  return [...counts.values()].sort((a, b) => b.n - a.n)[0]?.d;
+}
+
+// ── Controlli di coerenza delle NVP (usati da Analisi Prezzi e prima dell'esportazione) ─────────────────
+export interface NvpDuplicate { descrizione: string; gruppi: NvpGroup[] }
+export interface NvpIssues {
+  /** Stessa tariffa con testi descrittivi diversi */
+  tariffe: NvpGroup[];
+  /** Stessa descrizione con tariffe diverse (possibili duplicati da unire) */
+  duplicati: NvpDuplicate[];
+  /** Totale dei problemi da risolvere */
+  totale: number;
+}
+
+export function nvpIssues(results: ResultadoItem[], groups: NvpGroup[] = groupNvp(results)): NvpIssues {
+  const tariffe = groups.filter(g => g.conflitto);
+
+  // stessa descrizione in gruppi con tariffe diverse; se due NVP convivono nello stesso elemento
+  // (componenti diversi di una composizione) non sono duplicati
+  const byText = new Map<string, { text: string; groups: NvpGroup[] }>();
+  for (const g of groups) {
+    for (const d of g.descrizioni) {
+      const k = normText(d);
+      if (!k) continue;
+      const e = byText.get(k) ?? { text: d, groups: [] };
+      if (!e.groups.includes(g)) e.groups.push(g);
+      byText.set(k, e);
+    }
+  }
+  const ids = (g: NvpGroup) => new Set(g.entries.map(e => e.result.idElemento));
+  const duplicati: NvpDuplicate[] = [];
+  for (const { text, groups: gs } of byText.values()) {
+    if (gs.length < 2) continue;
+    const sets = gs.map(ids);
+    const apart = gs.filter((_, i) => gs.some((__, j) => j !== i && ![...sets[i]].some(id => sets[j].has(id))));
+    if (apart.length >= 2) duplicati.push({ descrizione: text, gruppi: apart });
+  }
+  return { tariffe, duplicati, totale: tariffe.length + duplicati.length };
+}
+
+/** Righe di testo per un messaggio di conferma */
+export function describeNvpIssues(issues: NvpIssues, max = 8): string[] {
+  const lines = [
+    ...issues.tariffe.map(g => `Tariffa ${g.codice}: ${g.descrizioni.length} testi diversi (${g.descrizioni.slice(0, 3).join(' / ')})`),
+    ...issues.duplicati.map(d => `"${d.descrizione}": tariffe diverse (${d.gruppi.map(g => g.codice || '—').join(', ')})`),
+  ];
+  return lines.length > max ? [...lines.slice(0, max), `… e altri ${lines.length - max}`] : lines;
 }

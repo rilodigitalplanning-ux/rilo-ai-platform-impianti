@@ -21,6 +21,8 @@ export interface Filter {
   wbs?: string[];
   codice?: string;
   nvp?: boolean;
+  /** Modello Revit di provenienza (es. FM, LUCE) */
+  modello?: string;
 }
 
 export interface ToolContext {
@@ -59,6 +61,7 @@ export function matches(r: ResultadoItem, f: Filter | undefined): boolean {
   if (!f) return true;
   if (f.ids && !f.ids.includes(r.idElemento)) return false;
   if (f.nvp !== undefined && isNvpResult(r) !== f.nvp) return false;
+  if (f.modello && !ci(r.modello).includes(ci(f.modello))) return false;
   if (f.status && r.status !== f.status.toUpperCase().replace('NON TROVATO', 'NAO_ENCONTRADO')) return false;
   if (f.categoria && !ci(r.categoria).includes(ci(f.categoria))) return false;
   if (f.wbs) {
@@ -128,6 +131,7 @@ const HANDLERS: Record<string, Handler> = {
     const key = (r: ResultadoItem) => {
       if (by === 'categoria') return r.categoria || '—';
       if (by === 'status') return r.status;
+      if (by === 'modello') return r.modello || '—';
       const m = /^wbs(\d+)$/.exec(by);
       return m ? (wbsLevels(r)[Number(m[1]) - 1] || '—') : '—';
     };
@@ -304,6 +308,7 @@ const FILTER_SCHEMA = {
     wbs: { type: 'array', items: { type: 'string' }, description: 'valori per livello WBS1, WBS2…; "" = qualsiasi' },
     codice: { type: 'string', description: 'codice (o inizio del codice) di prezzario/NVP' },
     nvp: { type: 'boolean', description: 'true = solo elementi con NVP' },
+    modello: { type: 'string', description: 'modello Revit di provenienza (es. FM, LUCE)' },
   },
 } as const;
 const CONFIRMED = { type: 'boolean', description: 'true solo dopo che l\'utente ha confermato un\'operazione sopra soglia' } as const;
@@ -311,7 +316,7 @@ const MODE = { type: 'string', enum: ['prefix', 'contains', 'exact'] } as const;
 
 export const AGENT_TOOLS = [
   { name: 'find_elements', description: 'Cerca elementi del computo con un filtro. Restituisce totale, importo e i primi elementi.', input_schema: { type: 'object', properties: { filter: FILTER_SCHEMA, limit: { type: 'number' } } } },
-  { name: 'summarize', description: 'Totali raggruppati per categoria, status o livello WBS (wbs1, wbs2, …).', input_schema: { type: 'object', properties: { group_by: { type: 'string', description: 'categoria | status | wbs1 | wbs2 | wbs3 …' }, filter: FILTER_SCHEMA }, required: ['group_by'] } },
+  { name: 'summarize', description: 'Totali raggruppati per categoria, status o livello WBS (wbs1, wbs2, …).', input_schema: { type: 'object', properties: { group_by: { type: 'string', description: 'categoria | status | modello | wbs1 | wbs2 | wbs3 …' }, filter: FILTER_SCHEMA }, required: ['group_by'] } },
   { name: 'rename_nvp_codes', description: 'Rinomina i codici delle NVP (es. cambia il prefisso "NVP" in "NP"). Agisce solo sulle NVP.', input_schema: { type: 'object', properties: { find: { type: 'string' }, replace: { type: 'string' }, mode: MODE, filter: FILTER_SCHEMA }, required: ['find', 'replace'] } },
   { name: 'replace_text', description: 'Sostituisce testo nelle descrizioni degli elementi, nelle categorie o in un livello WBS.', input_schema: { type: 'object', properties: { field: { type: 'string', enum: ['descrizione', 'categoria', 'wbs'] }, wbs_level: { type: 'number', description: 'livello WBS (1 = WBS1) se field=wbs' }, find: { type: 'string' }, replace: { type: 'string' }, mode: MODE, filter: FILTER_SCHEMA }, required: ['field', 'find', 'replace'] } },
   { name: 'set_fields', description: 'Imposta quantità, unità di misura, categoria o percorso WBS completo sugli elementi filtrati.', input_schema: { type: 'object', properties: { filter: FILTER_SCHEMA, fields: { type: 'object', properties: { quantita: { type: 'number' }, unita_misura: { type: 'string' }, categoria: { type: 'string' }, wbs: { type: 'array', items: { type: 'string' } } } } }, required: ['fields'] } },

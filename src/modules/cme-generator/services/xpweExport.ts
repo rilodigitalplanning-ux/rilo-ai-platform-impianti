@@ -3,7 +3,7 @@
 //   categoria della scheda (CME_CATEGORIE) come ultimo livello (senza duplicarla se coincide con l'ultimo livello WBS).
 //   Ogni componente di una composizione diventa una voce di computo: riga di misura = quantità dell'elemento × fattore.
 import type { ResultadoItem } from '../types';
-import { wbsLevels } from '../lib/wbs';
+import { defaultHierarchy, hierarchyPath, type HierarchyItem } from '../lib/hierarchy';
 import { round2, type NvpDetails, type NvpRow } from './pricing';
 
 export interface XpweExport {
@@ -52,7 +52,11 @@ function linesOf(r: ResultadoItem): Line[] {
   });
 }
 
-export function buildXpwe(results: ResultadoItem[], opts: { projectName: string; fileName?: string; today?: Date }): XpweExport {
+export function buildXpwe(
+  results: ResultadoItem[],
+  opts: { projectName: string; fileName?: string; today?: Date; hierarchy?: HierarchyItem[] },
+): XpweExport {
+  const config = opts.hierarchy ?? defaultHierarchy(results);
   const today = dmy(opts.today ?? new Date());
   const warnings: string[] = [];
   const eps = new Map<string, Ep>();
@@ -106,9 +110,9 @@ export function buildXpwe(results: ResultadoItem[], opts: { projectName: string;
   };
   let merged = 0;
   const hierarchy = (r: ResultadoItem): [number, number, number] => {
-    const lv = wbsLevels(r);
-    const cat = (r.categoria || '').trim();
-    if (cat && cat !== lv[lv.length - 1]) lv.push(cat);
+    // livelli nell'ordine configurato per il progetto; due livelli consecutivi uguali (es. categoria già presente
+    // come ultimo livello WBS nei progetti da PriMus) si contano una volta sola
+    const lv = hierarchyPath(r, config).filter((v, i, a) => i === 0 || v !== a[i - 1]);
     if (lv.length === 0) lv.push('Generale');
     let p = lv;
     if (lv.length > MAX_LEVELS) { p = [...lv.slice(0, MAX_LEVELS - 1), lv.slice(MAX_LEVELS - 1).join(' / ')]; merged++; }

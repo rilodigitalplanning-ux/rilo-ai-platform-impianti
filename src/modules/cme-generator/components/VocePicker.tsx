@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Loader2, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { fmt4 as fmt } from '../lib/format';
 import { listPrezzarios } from '../services/prezzarioService';
 import { searchVoci, type VoceHit } from '../services/consultaService';
 import type { PrezzarioRecord } from '../types';
@@ -12,7 +13,6 @@ interface Props {
   onSelect: (v: VoceChoice) => void;
 }
 
-const fmt = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
 // Selettore di una voce di prezzario: scelta del prezzario + ricerca per testo o codice.
 export const VocePicker: React.FC<Props> = ({ selected, onSelect, initialQuery = '' }) => {

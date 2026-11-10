@@ -6,6 +6,7 @@ import { useDiscardGuard } from '../hooks/useDiscardGuard';
 import { useCme } from '../context/CmeContext';
 import { useApp } from '../context/AppContext';
 import { parseXpwe, xpweToResults } from '../services/xpwe';
+import { defaultHierarchy } from '../lib/hierarchy';
 
 interface ProjectsViewProps {
   onNext: () => void;
@@ -82,7 +83,9 @@ export function ProjectsView({ onNext, onImported }: ProjectsViewProps) {
       if (resultados.length === 0) throw new Error('Nessuna voce di computo trovata nel file XPWE.');
       const name = file.name.replace(/.[^.]+$/, '');
       guard(() => {
-        dispatch({ type: 'IMPORT_PROJECT', payload: { name, resultados } });
+        // le categorie di PriMus sono già i livelli WBS: la categoria non si ripete come livello a parte
+        const hierarchy = defaultHierarchy(resultados).map(i => (i.id === 'cat' ? { ...i, enabled: false } : i));
+        dispatch({ type: 'IMPORT_PROJECT', payload: { name, resultados, hierarchy } });
         showToast(
           `XPWE importato: ${resultados.length} elementi${warnings.length ? ` (${warnings.length} righe ignorate)` : ''}. Salva il progetto per conservarlo.`,
           'success',

@@ -2,8 +2,8 @@
 // Vista "Computo Metrico": il computo in lavorazione (caricamento → elaborazione →
 // revisione → risultati). Il layout esterno (sidebar, intestazione, utente) è in
 // components/layout/MainLayout.tsx.
-import React, { useState, useEffect } from 'react';
-import { Brain, Settings } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Settings } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCme } from '../context/CmeContext';
 import { useApp } from '../context/AppContext';
@@ -14,7 +14,6 @@ import { ReviewView } from './ReviewView';
 import { ChatView } from './ChatView';
 import { CmeSettingsPage } from './CmeSettingsPage';
 import { listPrezzarios } from '../services/prezzarioService';
-import { getExamplesCount } from '../services/examplesService';
 import { BYPASS_USER } from '../lib/currentUser';
 import type { PrezzarioRecord } from '../types';
 
@@ -22,9 +21,11 @@ export function ComputoMetricoView() {
   const user = BYPASS_USER;
   const { moduleTheme, computoView: view, setComputoView: setView, prezzariVersion } = useApp();
   const { state } = useCme();
+  // l'elaborazione termina in un callback creato prima dei risultati: serve lo stato più recente
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [activeTab, setActiveTab] = useState<'results' | 'chat'>('results');
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
-  const [examplesCount, setExamplesCount] = useState(0);
 
   // Prezzari (caricati da Supabase, condivisi tra tutti gli utenti)
   const [prezzarios, setPrezzarios] = useState<PrezzarioRecord[]>([]);
@@ -39,10 +40,8 @@ export function ComputoMetricoView() {
         if (list.length > 0 && !targetPrezzarioId) setTargetPrezzarioId(list[list.length > 1 ? 1 : 0].id!);
       })
       .catch(() => {});
-    getExamplesCount().then(setExamplesCount).catch(() => {});
   }, [prezzariVersion]);
 
-  const refName    = prezzarios.find(p => p.id === refPrezzarioId)?.nome ?? 'DEI';
   const targetName = prezzarios.find(p => p.id === targetPrezzarioId)?.nome ?? 'Target';
 
   function handleElementSelect(id: string) {
@@ -96,10 +95,6 @@ export function ComputoMetricoView() {
         )}
 
         <div className="flex items-center gap-3 ml-auto">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-xs text-gray-500 dark:text-white/40">
-            <Brain size={12} style={{ color: `${moduleTheme.accent}99` }} />
-            <span>{examplesCount.toLocaleString('it-IT')} esempi</span>
-          </div>
 
           {user.role === 'admin' && (
             <button
@@ -137,20 +132,18 @@ export function ComputoMetricoView() {
 
           {view === 'processing' && (
             <ProcessingView
-              refPrezzarioId={refPrezzarioId!}
               targetPrezzarioId={targetPrezzarioId!}
-              refPrezzarioName={refName}
               targetPrezzarioName={targetName}
-              onDone={() => setView('review')}
+              onDone={() => {
+                // la revisione serve solo se ci sono voci da verificare (ALERT o NON TROVATO)
+                const needsReview = [...stateRef.current.resultados.values()].some(r => r.status === 'ALERT' || r.status === 'NAO_ENCONTRADO');
+                setView(needsReview ? 'review' : 'results');
+              }}
             />
           )}
 
           {view === 'review' && (
-            <ReviewView
-              user={user}
-              onFinish={() => { setView('results'); getExamplesCount().then(setExamplesCount).catch(() => {}); }}
-              onSkip={() => setView('results')}
-            />
+            <ReviewView onFinish={() => setView('results')} />
           )}
 
           {view === 'results' && activeTab === 'results' && (

@@ -5,6 +5,8 @@ import type { AgentMessage, PrezzarioRecord, ResultadoItem } from '../types';
 import { getAnthropicClient, CLAUDE_MODEL } from './claudeService';
 import { searchVoci } from './consultaService';
 import { wbsDepth, wbsLevels } from '../lib/wbs';
+import { fmt } from '../lib/format';
+import { activeItems, type HierarchyItem } from '../lib/hierarchy';
 import { AGENT_TOOLS, CONFIRM_THRESHOLD, Workspace, isNvpResult, runTool, type ToolContext } from './agentTools';
 import type { Changes } from './pricing';
 
@@ -15,9 +17,8 @@ export interface AgentRun {
   after: number;
 }
 
-const fmt = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function buildProjectContext(results: ResultadoItem[], projectName?: string | null): string {
+function buildProjectContext(results: ResultadoItem[], projectName?: string | null, hierarchy?: HierarchyItem[]): string {
   const total = results.reduce((s, r) => s + r.total, 0);
   const depth = wbsDepth(results);
   const levels = Array.from({ length: depth }, (_, i) => {
@@ -31,6 +32,7 @@ export function buildProjectContext(results: ResultadoItem[], projectName?: stri
   return [
     `Progetto: ${projectName || 'non salvato'} — ${results.length} elementi, importo totale € ${fmt(total)}.`,
     `Livelli WBS: ${depth}. ${levels.join(' | ')}`,
+    hierarchy ? `Gerarchia di voce (dall'alto): ${activeItems(hierarchy).map(h => (h.id === 'cat' ? `${h.label} (categoria)` : `${h.label} (WBS${h.id.slice(3)}, wbs_level ${h.id.slice(3)})`)).join(' › ')}. L'utente può usare questi nomi.` : '',
     `Categorie (${cats.length}): ${cats.slice(0, 20).join(', ')}`,
     `Elementi con NVP: ${nvp.length}. Codici NVP: ${nvpCodes.slice(0, 20).join(', ') || '—'}`,
     `Elementi NON TROVATO: ${nf}.`,
@@ -56,10 +58,11 @@ export async function runAgent(params: {
   text: string;
   results: ResultadoItem[];
   projectName?: string | null;
+  hierarchy?: HierarchyItem[];
   prezzari: PrezzarioRecord[];
   onStatus?: (s: string) => void;
 }): Promise<AgentRun> {
-  const { history, text, results, projectName, prezzari, onStatus } = params;
+  const { history, text, results, projectName, hierarchy, prezzari, onStatus } = params;
   const client = getAnthropicClient();
   const ws = new Workspace(results);
   const before = ws.total();
@@ -76,7 +79,7 @@ export async function runAgent(params: {
   if (lastMsg && lastMsg.role === 'user') { messages.pop(); messages.push({ role: 'user', content: `${lastMsg.content}\n\n${text}` }); }
   else messages.push({ role: 'user', content: text });
 
-  const system = SYSTEM(buildProjectContext(results, projectName));
+  const system = SYSTEM(buildProjectContext(results, projectName, hierarchy));
 
   for (let step = 0; step < 14; step++) {
     const response = await client.messages.create({

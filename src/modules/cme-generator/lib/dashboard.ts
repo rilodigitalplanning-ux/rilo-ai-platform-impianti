@@ -1,18 +1,17 @@
 import type { ResultadoItem } from '../types';
-import { wbsLevels } from './wbs';
+import { dimensionValue, defaultLabel } from './hierarchy';
 
 // Dimensioni di analisi del riepilogo: 'cat' (categoria) oppure 'wbs1', 'wbs2', …
 export type DashDim = string;
 /** Valori spuntati per dimensione; dimensione assente o vuota = nessun filtro */
 export type Selection = Record<DashDim, string[]>;
 
-export const NONE = '—';
+const NONE = '—';
 
-export const dimLabel = (dim: DashDim) => (dim === 'cat' ? 'Categoria' : `WBS${dim.slice(3)}`);
+export const dimLabel = (dim: DashDim) => defaultLabel(dim);
 
 export function dimValue(r: ResultadoItem, dim: DashDim): string {
-  if (dim === 'cat') return (r.categoria || '').trim() || NONE;
-  return wbsLevels(r)[Number(dim.slice(3)) - 1] || NONE;
+  return dimensionValue(r, dim) || NONE;
 }
 
 /** Elementi che rispettano la selezione (opzionalmente ignorando una dimensione, per i conteggi "a faccette") */

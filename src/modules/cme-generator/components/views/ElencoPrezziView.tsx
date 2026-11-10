@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Search, Plus, Replace, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useCme } from '../../context/CmeContext';
+import { fmt, fmtQty } from '../../lib/format';
 import { EmptyProjectNotice } from '../EmptyProjectNotice';
 import { ReplaceVoceDialog } from '../ReplaceVoceDialog';
 import { AddItemDialog } from '../AddItemDialog';
@@ -10,8 +11,6 @@ import { groupVoci, deleteVoce, type VoceRow, type Changes } from '../../service
 
 type Filter = 'tutte' | 'voce' | 'nvp' | 'risorsa' | 'nf';
 
-const fmt = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtQty = (v: number) => v.toLocaleString('it-IT', { maximumFractionDigits: 2 });
 
 export const ElencoPrezziView: React.FC = () => {
   const { moduleTheme, showToast } = useApp();

@@ -144,19 +144,6 @@ export async function getTemplateMeta(userId: string): Promise<TemplateMetadata 
   return null;
 }
 
-// ── Save updated metadata (e.g. after analysis) ───────────────────────────────
-export async function saveTemplateMeta(userId: string, meta: TemplateMetadata): Promise<void> {
-  savMetaLocal(meta);
-  try {
-    await supabase.from('cme_config').upsert(
-      { user_id: userId, chave: CONFIG_KEY, valor: JSON.stringify(meta) },
-      { onConflict: 'user_id,chave' },
-    );
-  } catch (e) {
-    console.warn('[templateService] saveTemplateMeta Supabase failed, localStorage only:', e);
-  }
-}
-
 // ── Download template as ArrayBuffer (for ExcelJS) ────────────────────────────
 export async function downloadTemplateBuffer(): Promise<ArrayBuffer> {
   const { data, error } = await supabase.storage

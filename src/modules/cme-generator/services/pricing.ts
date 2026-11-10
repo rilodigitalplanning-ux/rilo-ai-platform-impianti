@@ -134,8 +134,8 @@ export const elementKey = (r: ResultadoItem) =>
   r.status === 'NVP' ? nvpKey(r.tariffaOriginal, r.descrizioneElemento) : `F|${r.tariffaOriginal || ''}|${r.descrizioneElemento}`;
 
 // ── Risorse (manodopera / noleggi dal prezzario) dentro le analisi NVP ─────────
-export const risorsaKey = (tipo: RisorsaTipo, codice: string, prezzario?: string) => `R|${tipo}|${codice}|${prezzario ?? ''}`;
-export const isRisorsaKey = (key: string) => key.startsWith('R|');
+const risorsaKey = (tipo: RisorsaTipo, codice: string, prezzario?: string) => `R|${tipo}|${codice}|${prezzario ?? ''}`;
+const isRisorsaKey = (key: string) => key.startsWith('R|');
 
 // Analisi NVP di un risultato (di elemento o di sottovoce) con la quantità a cui si applica
 function nvpSources(r: ResultadoItem): { details: NvpDetails; qty: number }[] {

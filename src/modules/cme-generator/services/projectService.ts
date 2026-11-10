@@ -49,6 +49,7 @@ export async function saveProject(name: string, state: Partial<CmeState>, id?: s
     overrides: state.overrides ? Array.from(state.overrides.entries()) : [],
     rawBimOffData: state.rawBimOffData,
     agentChat: (state.agentChat || []).slice(-100),
+    hierarchy: state.hierarchy,
   };
 
   if (id) {

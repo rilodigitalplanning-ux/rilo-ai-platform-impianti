@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, ArrowRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { eur } from '../lib/format';
 import { VocePicker } from './VocePicker';
 import { NvpBuilderModal } from './NvpBuilderModal';
 import { replaceVoce, type VoceRow, type VoceChoice, type Changes } from '../services/pricing';
@@ -14,7 +15,6 @@ interface Props {
   onClose: () => void;
 }
 
-const eur = (v: number) => `€ ${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onClose }) => {
   const { moduleTheme } = useApp();

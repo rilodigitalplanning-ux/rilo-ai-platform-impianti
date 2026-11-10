@@ -235,17 +235,7 @@ export async function loadVoci(prezzarioId: number): Promise<PrezzarioVoce[]> {
   return all;
 }
 
-// ── Config: per-user key-value store ──────────────────────────────────────────
-export async function getConfig(userId: string, chave: string): Promise<string | undefined> {
-  const { data } = await supabase
-    .from('cme_config')
-    .select('valor')
-    .eq('user_id', userId)
-    .eq('chave', chave)
-    .single();
-  return data?.valor ?? undefined;
-}
-
+// ── Config: per-user key-value store (solo scrittura: la lettura passa da templateService) ──────────────────────────────────────────
 export async function setConfig(userId: string, chave: string, valor: string): Promise<void> {
   await supabase
     .from('cme_config')

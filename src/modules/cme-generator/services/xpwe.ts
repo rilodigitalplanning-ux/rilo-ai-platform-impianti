@@ -154,7 +154,7 @@ export function parseXpwe(xml: string): XpweDoc {
 }
 
 // ── Analisi di una NP → NVP del CME Generator ──
-export const XPWE_FONTE = 'XPWE (PriMus)';
+const XPWE_FONTE = 'XPWE (PriMus)';
 
 export function analisiToNvp(item: EpItem, doc: Pick<XpweDoc, 'ep' | 'speseGenerali' | 'utili'>): NvpDetails {
   const materiali: NvpRow[] = [];

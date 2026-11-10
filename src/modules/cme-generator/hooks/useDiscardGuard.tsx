@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useCme } from '../context/CmeContext';
 import { useApp } from '../context/AppContext';

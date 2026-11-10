@@ -1,28 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // src/modules/cmeGenerator/services/excelExporter.ts
-// Generate a 5-sheet .xlsx workbook from ResultadoItem[]
-// Uses SheetJS (xlsx) — 100% browser-native, no Node.js dependencies.
-// Gli importi sono formule Excel (quantità × prezzo, somme e SUMIFS): modificando una quantità o
-// un prezzo nel foglio Computo, tutti i totali e i riepiloghi si aggiornano.
+// Excel di esportazione (SheetJS): foglio Computo + un riepilogo per ogni livello della gerarchia del
+// progetto + matrice dei primi due livelli + Dashboard. L'ordine e i nomi dei livelli vengono dalla
+// gerarchia impostata nel progetto. Gli importi sono formule (quantità × prezzo, SUBTOTAL, SUMIFS):
+// modificando una quantità o un prezzo nel foglio Computo, totali e riepiloghi si aggiornano.
 // ─────────────────────────────────────────────────────────────────────────────
-import { wbsLevels, wbsDepth } from '../lib/wbs';
+import { activeItems, defaultHierarchy, dimensionValue, sheetName, type HierarchyItem } from '../lib/hierarchy';
 import type { ResultadoItem } from '../types';
 import type * as XLSXType from 'xlsx';
 
-// Note: SheetJS community edition has limited style support.
-// We use cell metadata and rely on data organisation for visual clarity.
-
 const SHEET = 'Computo';
-const LEAF = '  [*'; // le righe delle voci iniziano con "  [codice]": criterio per sommare solo le righe foglia
 
 interface Layout {
-  depth: number;
-  cCat: number; cDesc: number; cQty: number; cVal: number; cTot: number; cStatus: number;
+  cols: HierarchyItem[];
+  cDesc: number; cQty: number; cVal: number; cTot: number; cStatus: number;
   firstRow: number; lastRow: number; // righe Excel (1-based) dei dati, esclusa la riga TOTALE
 }
 
 const col = (XLSX: typeof XLSXType, c: number) => XLSX.utils.encode_col(c);
 const rng = (XLSX: typeof XLSXType, c: number, lay: Layout) => `${SHEET}!$${col(XLSX, c)}$${lay.firstRow}:$${col(XLSX, c)}$${lay.lastRow}`;
+const dimCol = (lay: Layout, id: string) => lay.cols.findIndex(c => c.id === id);
 
 function setFormula(XLSX: typeof XLSXType, ws: XLSXType.WorkSheet, r: number, c: number, f: string, v: number, z?: string) {
   const cell: XLSXType.CellObject = { t: 'n', f, v };
@@ -30,15 +27,12 @@ function setFormula(XLSX: typeof XLSXType, ws: XLSXType.WorkSheet, r: number, c:
   ws[XLSX.utils.encode_cell({ r, c })] = cell;
 }
 
-function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): { ws: XLSXType.WorkSheet; lay: Layout } {
-  const depth = wbsDepth(results);
-  const headers = [
-    ...Array.from({ length: depth }, (_, i) => `WBS${i + 1}`), 'IMPIANTO', 'CATEGORIA', 'DESCRIZIONE',
-    'QTD', 'UM', 'VALORE UNIT.', 'TOTALE (€)', 'PREZZARIO', 'STATUS',
-  ];
-  const cCat = depth + 1, cDesc = depth + 2, cQty = depth + 3, cVal = depth + 5, cTot = depth + 6, cStatus = depth + 8;
+function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[], cols: HierarchyItem[]): { ws: XLSXType.WorkSheet; lay: Layout } {
+  const nC = cols.length;
+  const headers = [...cols.map(c => c.label), 'DESCRIZIONE', 'QTD', 'UM', 'VALORE UNIT.', 'TOTALE (€)', 'PREZZARIO', 'STATUS'];
+  const cDesc = nC, cQty = nC + 1, cVal = nC + 3, cTot = nC + 4, cStatus = nC + 6;
 
-  // Ogni riga dati con le informazioni necessarie per scrivere le formule (indice di riga Excel 0-based)
+  // Ogni riga dati con le informazioni necessarie per scrivere le formule
   type Meta = { kind: 'parent'; first: number; last: number; total: number; value: number }
     | { kind: 'child'; parent: number; fattore: number; qty: number; total: number };
   const dataRows: any[][] = [];
@@ -47,9 +41,7 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): { w
   for (const item of results) {
     const parentRow = dataRows.length + 1; // +1: riga di intestazione
     dataRows.push([
-      ...Array<string>(depth).fill(''), // WBS (solo sulle righe delle voci)
-      item.tipoImpianto || '', // IMPIANTO
-      item.categoria,
+      ...Array<string>(nC).fill(''), // livelli della gerarchia: solo sulle righe delle voci
       item.descrizioneElemento,
       item.quantitaElemento,
       item.unidade || '',
@@ -75,10 +67,8 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): { w
       const childQty = item.quantitaElemento * fattore;
       const childTot = childQty * (sub.valoreUnitario || 0);
       dataRows.push([
-        ...Array.from({ length: depth }, (_, i) => wbsLevels(item)[i] ?? ''),
-        item.tipoImpianto || '', // IMPIANTO
-        item.categoria,
-        `${LEAF.slice(0, 3)}${sub.codicePrezzarioTarget || 'NVP'}] ${sub.descrizionePrezzarioTarget}`,
+        ...cols.map(c => dimensionValue(item, c.id)),
+        `  [${sub.codicePrezzarioTarget || 'NVP'}] ${sub.descrizionePrezzarioTarget}`,
         childQty,
         sub.unidade || (sub as any).um || '',
         sub.valoreUnitario,
@@ -117,37 +107,40 @@ function buildComputoSheet(XLSX: typeof XLSXType, results: ResultadoItem[]): { w
   }
 
   ws['!cols'] = [
-    ...Array.from({ length: depth }, () => ({ wch: 16 })), { wch: 18 }, { wch: 18 }, { wch: 48 },
+    ...cols.map(() => ({ wch: 18 })), { wch: 48 },
     { wch: 9 },  { wch: 8 },  { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 12 },
   ];
 
-  const lay: Layout = { depth, cCat, cDesc, cQty, cVal, cTot, cStatus, firstRow: 2, lastRow: dataRows.length + 1 };
+  const lay: Layout = { cols, cDesc, cQty, cVal, cTot, cStatus, firstRow: 2, lastRow: dataRows.length + 1 };
   return { ws, lay };
 }
 
-// Riepilogo per categoria: SUMIFS sulle righe foglia del foglio Computo
-function buildCategoriaSheet(XLSX: typeof XLSXType, results: ResultadoItem[], lay: Layout): XLSXType.WorkSheet {
-  const headers = ['CATEGORIA', 'QTD ITENS', 'TOTALE (€)', '%'];
-
+// Riepilogo di un livello della gerarchia: SUMIFS sulla colonna del livello nel foglio Computo
+// (le righe degli elementi hanno i livelli vuoti, quindi si sommano solo le righe delle voci)
+function buildDimensionSheet(XLSX: typeof XLSXType, results: ResultadoItem[], lay: Layout, item: HierarchyItem): XLSXType.WorkSheet {
+  const headers = [item.label.toUpperCase(), 'ELEMENTI', 'TOTALE (€)', '%'];
   const map = new Map<string, { count: number; total: number }>();
   const grandTotal = results.reduce((s, r) => s + r.total, 0);
   for (const r of results) {
-    const entry = map.get(r.categoria) ?? { count: 0, total: 0 };
+    const key = dimensionValue(r, item.id);
+    const entry = map.get(key) ?? { count: 0, total: 0 };
     entry.count++;
     entry.total += r.total;
-    map.set(r.categoria, entry);
+    map.set(key, entry);
   }
 
   const sorted = [...map.entries()].sort((a, b) => b[1].total - a[1].total);
-  const dataRows = sorted.map(([cat, data]) => [cat, data.count, data.total, grandTotal > 0 ? data.total / grandTotal : 0]);
+  const dataRows = sorted.map(([v, data]) => [v || '(non assegnato)', data.count, data.total, grandTotal > 0 ? data.total / grandTotal : 0]);
   const n = dataRows.length;
   const totalRow = ['TOTALE', results.length, grandTotal, 1];
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow]);
-  sorted.forEach(([cat, data], i) => {
+  const c = dimCol(lay, item.id);
+  sorted.forEach(([v, data], i) => {
     const r = i + 1;
-    setFormula(XLSX, ws, r, 2,
-      `SUMIFS(${rng(XLSX, lay.cTot, lay)},${rng(XLSX, lay.cCat, lay)},A${r + 1},${rng(XLSX, lay.cDesc, lay)},"${LEAF}")`, data.total);
+    if (v) {
+      setFormula(XLSX, ws, r, 2, `SUMIFS(${rng(XLSX, lay.cTot, lay)},${rng(XLSX, c, lay)},A${r + 1})`, data.total);
+    }
     setFormula(XLSX, ws, r, 3, `IF(C$${n + 2}=0,0,C${r + 1}/C$${n + 2})`, grandTotal > 0 ? data.total / grandTotal : 0, '0.0%');
   });
   setFormula(XLSX, ws, n + 1, 1, `SUM(B2:B${n + 1})`, results.length);
@@ -157,68 +150,27 @@ function buildCategoriaSheet(XLSX: typeof XLSXType, results: ResultadoItem[], la
   return ws;
 }
 
-// Matrice WBS2 × WBS1: SUMIFS sulle colonne WBS del foglio Computo (compilate solo sulle righe foglia)
-function buildLivelloSheet(XLSX: typeof XLSXType, results: ResultadoItem[], lay: Layout): XLSXType.WorkSheet {
-  const edificios = [...new Set(results.map(r => wbsLevels(r)[0] ?? ''))].sort();
-  const livelli   = [...new Set(results.map(r => wbsLevels(r)[1] ?? ''))].sort();
+// Matrice dei primi due livelli attivi (secondo × primo)
+function buildMatrixSheet(XLSX: typeof XLSXType, results: ResultadoItem[], lay: Layout, a: HierarchyItem, b: HierarchyItem): XLSXType.WorkSheet {
+  const va = [...new Set(results.map(r => dimensionValue(r, a.id)))].filter(Boolean).sort();
+  const vb = [...new Set(results.map(r => dimensionValue(r, b.id)))].filter(Boolean).sort();
+  const headers = [`${b.label} \\ ${a.label}`, ...va];
+  const ca = dimCol(lay, a.id), cb = dimCol(lay, b.id);
 
-  const headers = ['WBS2 \\ WBS1', ...edificios];
-  const dataRows = livelli.map(lv => {
-    const row: any[] = [lv];
-    for (const ed of edificios) {
-      const total = results
-        .filter(r => (wbsLevels(r)[1] ?? '') === lv && (wbsLevels(r)[0] ?? '') === ed)
-        .reduce((s, r) => s + r.total, 0);
-      row.push(total > 0 ? total : '');
-    }
-    return row;
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-  if (lay.depth >= 2) {
-    livelli.forEach((lv, i) => edificios.forEach((ed, j) => {
-      if (!lv || !ed) return; // livelli senza nome: restano valori
-      const cell = ws[XLSX.utils.encode_cell({ r: i + 1, c: j + 1 })];
-      if (!cell) return;
-      setFormula(XLSX, ws, i + 1, j + 1,
-        `SUMIFS(${rng(XLSX, lay.cTot, lay)},${rng(XLSX, 0, lay)},${col(XLSX, j + 1)}$1,${rng(XLSX, 1, lay)},$A${i + 2},${rng(XLSX, lay.cDesc, lay)},"${LEAF}")`, cell.v as number);
-    }));
-  }
-  ws['!cols'] = [{ wch: 20 }, ...edificios.map(() => ({ wch: 16 }))];
-  return ws;
-}
-
-// WBS1 × categoria, con subtotali e totale generale
-function buildEdificioSheet(XLSX: typeof XLSXType, results: ResultadoItem[], lay: Layout): XLSXType.WorkSheet {
-  const headers = ['WBS1', 'CATEGORIA', 'TOTALE (€)'];
-  const rows: any[][] = [headers];
-  const formulas: { r: number; f: string; v: number }[] = [];
-
-  const edificios = [...new Set(results.map(r => wbsLevels(r)[0] ?? ''))].sort();
-  const subtotRows: number[] = [];
-  for (const ed of edificios) {
-    const edItems = results.filter(r => (wbsLevels(r)[0] ?? '') === ed);
-    const catMap = new Map<string, number>();
-    for (const r of edItems) catMap.set(r.categoria, (catMap.get(r.categoria) ?? 0) + r.total);
-    const edTotal = edItems.reduce((s, r) => s + r.total, 0);
-
-    const first = rows.length + 1; // riga Excel 1-based della prima categoria
-    for (const [cat, total] of [...catMap.entries()].sort((a, b) => b[1] - a[1])) {
-      rows.push([ed, cat, total]);
-      if (ed) formulas.push({ r: rows.length - 1, v: total, f: `SUMIFS(${rng(XLSX, lay.cTot, lay)},${rng(XLSX, 0, lay)},A${rows.length},${rng(XLSX, lay.cCat, lay)},B${rows.length},${rng(XLSX, lay.cDesc, lay)},"${LEAF}")` });
-    }
-    rows.push([`Subtotale ${ed}`, '', edTotal]);
-    formulas.push({ r: rows.length - 1, v: edTotal, f: `SUM(C${first}:C${rows.length - 1})` });
-    subtotRows.push(rows.length);
-  }
-
-  const grandTotal = results.reduce((s, r) => s + r.total, 0);
-  rows.push(['TOTALE GENERALE', '', grandTotal]);
-  if (subtotRows.length) formulas.push({ r: rows.length - 1, v: grandTotal, f: subtotRows.map(r => `C${r}`).join('+') });
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  if (lay.depth >= 1) formulas.forEach(x => setFormula(XLSX, ws, x.r, 2, x.f, x.v));
-  ws['!cols'] = [{ wch: 20 }, { wch: 26 }, { wch: 18 }];
+  const rows = vb.map(rowVal => [rowVal, ...va.map(colVal => {
+    const total = results
+      .filter(r => dimensionValue(r, b.id) === rowVal && dimensionValue(r, a.id) === colVal)
+      .reduce((s, r) => s + r.total, 0);
+    return total > 0 ? total : '';
+  })]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  vb.forEach((_row, i) => va.forEach((_col, j) => {
+    const cell = ws[XLSX.utils.encode_cell({ r: i + 1, c: j + 1 })];
+    if (!cell) return;
+    setFormula(XLSX, ws, i + 1, j + 1,
+      `SUMIFS(${rng(XLSX, lay.cTot, lay)},${rng(XLSX, ca, lay)},${col(XLSX, j + 1)}$1,${rng(XLSX, cb, lay)},$A${i + 2})`, cell.v as number);
+  }));
+  ws['!cols'] = [{ wch: 24 }, ...va.map(() => ({ wch: 16 }))];
   return ws;
 }
 
@@ -235,9 +187,7 @@ function buildDashboardSheet(XLSX: typeof XLSXType, results: ResultadoItem[], la
     ['KPI', 'Valore'],
     ['Totale Generale (€)', grandTotal],
     ['Totale Elementi', results.length],
-    ['Edifici', new Set(results.map(r => wbsLevels(r)[0] ?? '')).size],
-    ['Livelli', new Set(results.map(r => wbsLevels(r)[1] ?? '')).size],
-    ['Categorie', new Set(results.map(r => r.categoria)).size],
+    ...lay.cols.map(c => [c.label, new Set(results.map(r => dimensionValue(r, c.id)).filter(Boolean)).size]),
     ['', ''],
     ['STATUS', 'Conteggio'],
     ['✓ OK', okCount],
@@ -248,17 +198,19 @@ function buildDashboardSheet(XLSX: typeof XLSXType, results: ResultadoItem[], la
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const status = rng(XLSX, lay.cStatus, lay);
+  const s0 = 5 + lay.cols.length + 2; // prima riga di conteggio (0-based)
   setFormula(XLSX, ws, 3, 1, `${SHEET}!${col(XLSX, lay.cTot)}${lay.lastRow + 1}`, grandTotal);
-  setFormula(XLSX, ws, 10, 1, `COUNTIF(${status},"OK")`, okCount);
-  setFormula(XLSX, ws, 11, 1, `COUNTIF(${status},"ALERT")`, alertCount);
-  setFormula(XLSX, ws, 12, 1, `COUNTIF(${status},"NAO_ENCONTRADO")`, nfCount);
-  setFormula(XLSX, ws, 13, 1, `COUNTIF(${status},"NVP")`, nvpCount);
+  setFormula(XLSX, ws, s0, 1, `COUNTIF(${status},"OK")`, okCount);
+  setFormula(XLSX, ws, s0 + 1, 1, `COUNTIF(${status},"ALERT")`, alertCount);
+  setFormula(XLSX, ws, s0 + 2, 1, `COUNTIF(${status},"NAO_ENCONTRADO")`, nfCount);
+  setFormula(XLSX, ws, s0 + 3, 1, `COUNTIF(${status},"NVP")`, nvpCount);
   ws['!cols'] = [{ wch: 30 }, { wch: 22 }];
   return ws;
 }
 
 /** Costruisce il workbook (separato dal download per poterlo verificare nei test) */
-export function buildWorkbook(XLSX: typeof XLSXType, results: ResultadoItem[]): XLSXType.WorkBook {
+export function buildWorkbook(XLSX: typeof XLSXType, results: ResultadoItem[], hierarchy?: HierarchyItem[]): XLSXType.WorkBook {
+  const cols = activeItems(hierarchy ?? defaultHierarchy(results));
   const wb = XLSX.utils.book_new();
   wb.Props = {
     Title: 'Computo Metrico Estimativo',
@@ -266,11 +218,15 @@ export function buildWorkbook(XLSX: typeof XLSXType, results: ResultadoItem[]): 
     CreatedDate: new Date(),
   };
 
-  const { ws: computo, lay } = buildComputoSheet(XLSX, results);
+  const used = new Set([SHEET.toLowerCase(), 'dashboard']);
+  const { ws: computo, lay } = buildComputoSheet(XLSX, results, cols);
   XLSX.utils.book_append_sheet(wb, computo, SHEET);
-  XLSX.utils.book_append_sheet(wb, buildCategoriaSheet(XLSX, results, lay), 'Categoria');
-  XLSX.utils.book_append_sheet(wb, buildLivelloSheet(XLSX, results, lay), 'WBS2');
-  XLSX.utils.book_append_sheet(wb, buildEdificioSheet(XLSX, results, lay), 'WBS1');
+  for (const item of cols) {
+    XLSX.utils.book_append_sheet(wb, buildDimensionSheet(XLSX, results, lay, item), sheetName(item.label, used));
+  }
+  if (cols.length >= 2) {
+    XLSX.utils.book_append_sheet(wb, buildMatrixSheet(XLSX, results, lay, cols[0], cols[1]), sheetName(`${cols[1].label} x ${cols[0].label}`, used));
+  }
   XLSX.utils.book_append_sheet(wb, buildDashboardSheet(XLSX, results, lay), 'Dashboard');
   // Excel ricalcola tutte le formule all'apertura
   wb.Workbook = { ...(wb.Workbook ?? {}), CalcPr: { fullCalcOnLoad: true } } as XLSXType.WorkBook['Workbook'];
@@ -281,6 +237,7 @@ export function buildWorkbook(XLSX: typeof XLSXType, results: ResultadoItem[]): 
 export async function exportExcel(
   results: ResultadoItem[],
   filename = 'Computo_Metrico.xlsx',
+  hierarchy?: HierarchyItem[],
 ): Promise<void> {
   // Dynamic imports: only pulled in when the user clicks Export
   const [XLSX, { saveAs }] = await Promise.all([
@@ -288,7 +245,7 @@ export async function exportExcel(
     import('file-saver'),
   ]);
 
-  const wb = buildWorkbook(XLSX, results);
+  const wb = buildWorkbook(XLSX, results, hierarchy);
   const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   saveAs(new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 import type { Elemento, ResultadoItem, CmeState, ChatMessage, AgentMessage } from '../types';
+import { resolveHierarchy, type HierarchyItem } from '../lib/hierarchy';
 
 type Action =
   | { type: 'SET_ELEMENTOS'; payload: Elemento[] }
@@ -16,11 +17,12 @@ type Action =
   | { type: 'SET_PROJECT_ID'; payload: { id: string; name: string } | null }
   | { type: 'LOAD_PROJECT'; payload: any }
   | { type: 'APPLY_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[] } }
-  | { type: 'IMPORT_PROJECT'; payload: { name: string; resultados: ResultadoItem[] } }
+  | { type: 'IMPORT_PROJECT'; payload: { name: string; resultados: ResultadoItem[]; hierarchy?: HierarchyItem[] } }
   | { type: 'MARK_SAVED' }
   | { type: 'AGENT_ADD_MSG'; payload: AgentMessage }
   | { type: 'AGENT_CLEAR_CHAT' }
   | { type: 'APPLY_AGENT_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[]; label: string } }
+  | { type: 'SET_HIERARCHY'; payload: HierarchyItem[] | undefined }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'RESET' };
@@ -85,6 +87,7 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
         overrides: new Map(),
         chatHistory: new Map(),
         agentChat: [],
+        hierarchy: action.payload.hierarchy,
         undoStack: [],
         redoStack: [],
         projectId: null,
@@ -104,6 +107,8 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
       for (const id of action.payload.remove) { resultados.delete(id); overrides.delete(id); }
       return { ...state, resultados, overrides, dirty: true, undoStack: [...(state.undoStack ?? []), snap].slice(-MAX_UNDO), redoStack: [] };
     }
+    case 'SET_HIERARCHY':
+      return { ...state, hierarchy: action.payload, dirty: true };
     case 'UNDO': {
       const stack = state.undoStack ?? [];
       const snap = stack[stack.length - 1];
@@ -121,7 +126,7 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
     case 'MARK_SAVED':
       return { ...state, dirty: false };
     case 'RESET':
-      return { ...initialState, resultados: new Map(), overrides: new Map(), chatHistory: new Map(), rawBimOffData: undefined, agentChat: [], undoStack: [], redoStack: [] };
+      return { ...initialState, resultados: new Map(), overrides: new Map(), chatHistory: new Map(), rawBimOffData: undefined, hierarchy: undefined, agentChat: [], undoStack: [], redoStack: [] };
     case 'SET_RAW_BIM_OFF_DATA':
       return { ...state, rawBimOffData: action.payload };
     case 'SET_PROJECT_ID':
@@ -134,6 +139,7 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
         overrides: new Map(action.payload.overrides || []),
         rawBimOffData: action.payload.rawBimOffData,
         agentChat: action.payload.agentChat || [],
+        hierarchy: action.payload.hierarchy,
         undoStack: [],
         redoStack: [],
         projectId: action.payload.id,
@@ -151,6 +157,8 @@ interface CmeContextType {
   getAllEffectiveResults: () => ResultadoItem[];
   /** Importo totale del computo (risultati effettivi, override inclusi) */
   totalAmount: number;
+  /** Gerarchia di voce risolta sui dati correnti (tutti i livelli, attivi e non) */
+  hierarchy: HierarchyItem[];
   dispatch: React.Dispatch<Action>;
 }
 
@@ -177,8 +185,13 @@ export function CmeProvider({ children }: { children: React.ReactNode }) {
     [getAllEffectiveResults],
   );
 
+  const hierarchy = useMemo(
+    () => resolveHierarchy(state.hierarchy, getAllEffectiveResults()),
+    [state.hierarchy, getAllEffectiveResults],
+  );
+
   return (
-    <CmeContext.Provider value={{ state, getEffectiveResult, getAllEffectiveResults, totalAmount, dispatch }}>
+    <CmeContext.Provider value={{ state, getEffectiveResult, getAllEffectiveResults, totalAmount, hierarchy, dispatch }}>
       {children}
     </CmeContext.Provider>
   );

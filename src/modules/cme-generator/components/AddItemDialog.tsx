@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { eur } from '../lib/format';
 import { VocePicker } from './VocePicker';
 import { NvpBuilderModal } from './NvpBuilderModal';
 import { buildManualItem, type VoceChoice, type NvpDetails, type Changes } from '../services/pricing';
@@ -14,7 +15,6 @@ interface Props {
 
 const inputCls = 'w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2 text-[12px] outline-none dark:text-white';
 const labelCls = 'text-[9px] font-bold uppercase tracking-widest opacity-40';
-const eur = (v: number) => `€ ${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 // Aggiunge al progetto un elemento manuale, con una voce di prezzario oppure con una NVP.
 export const AddItemDialog: React.FC<Props> = ({ onApply, onClose }) => {

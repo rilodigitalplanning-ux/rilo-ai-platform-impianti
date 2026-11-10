@@ -1,17 +1,19 @@
 // src/modules/cmeGenerator/pages/ResultsView.tsx
-import { wbsLevels, wbsDepth } from '../lib/wbs';
-import React, { useState, useMemo } from 'react';
-import { Download, Search, Filter, ChevronDown, FileSpreadsheet, FileCode2 } from 'lucide-react';
+import { activeItems, dimensionValue, labelOf } from '../lib/hierarchy';
+import { useState, useMemo } from 'react';
+import { Download, Search, ChevronDown, FileSpreadsheet, FileCode2, Layers } from 'lucide-react';
 import { useCme } from '../context/CmeContext';
 import { exportExcel } from '../services/excelExporter';
 import { buildXpwe } from '../services/xpweExport';
+import { describeNvpIssues, nvpIssues } from '../services/nvpGroups';
+import { AddModelDialog } from '../components/AddModelDialog';
 import { fillTemplateAndExport } from '../services/excelFiller';
 import { hasTemplate } from '../services/templateService';
 import { useSaveProject } from '../hooks/useSaveProject';
 import { DashboardRiepilogo } from '../components/DashboardRiepilogo';
 import { NvpBuilderModal } from '../components/NvpBuilderModal';
 import { buildNvpResult } from '../services/claudeService';
-import type { ResultadoItem, StatusItem } from '../types';
+import type { StatusItem } from '../types';
 
 const STATUS_BADGE: Record<StatusItem, { label: string; className: string }> = {
   OK:            { label: 'OK',          className: 'bg-green-900/40 text-green-400 border-green-700/40' },
@@ -23,7 +25,7 @@ const STATUS_BADGE: Record<StatusItem, { label: string; className: string }> = {
 interface ResultsViewProps { onSelectElement: (id: string) => void }
 
 export function ResultsView({ onSelectElement }: ResultsViewProps) {
-  const { state, dispatch, getAllEffectiveResults } = useCme();
+  const { state, dispatch, getAllEffectiveResults, hierarchy } = useCme();
   const results = getAllEffectiveResults();
 
   const [tab, setTab] = useState<'computo' | 'categoria' | 'livello' | 'edificio' | 'dashboard'>('computo');
@@ -31,16 +33,29 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [filterStatus, setFilterStatus] = useState<StatusItem | 'ALL'>('ALL');
   const [isExporting, setIsExporting] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
+  const [addModelOpen, setAddModelOpen] = useState(false);
   const { save, isSaving } = useSaveProject();
   const [editingNvpId, setEditingNvpId] = useState<string | null>(null);
 
   const editingNvpItem = editingNvpId ? state.resultados.get(editingNvpId) || (results.find(x => x.idElemento === editingNvpId)) : null;
 
+  // Una tariffa NVP deve essere univoca (un solo codice e una sola descrizione): prima dell'esportazione si
+  // segnalano i conflitti e si chiede se continuare comunque
+  const confirmNvpOk = (): boolean => {
+    const issues = nvpIssues(results);
+    if (issues.totale === 0) return true;
+    return window.confirm(
+      `Ci sono ${issues.totale} conflitt${issues.totale === 1 ? 'o' : 'i'} nelle NVP:\n\n- ${describeNvpIssues(issues).join('\n- ')}\n\n` +
+      'Due NVP non possono avere lo stesso codice o la stessa descrizione. Risolvili da Analisi Prezzi.\n\nEsportare comunque?',
+    );
+  };
+
   const handleExportXpwe = () => {
     setExportMenu(false);
+    if (!confirmNvpOk()) return;
     try {
       const name = state.projectName || 'Computo Metrico';
-      const out = buildXpwe(results, { projectName: name, fileName: `${name}.xpwe` });
+      const out = buildXpwe(results, { projectName: name, fileName: `${name}.xpwe`, hierarchy });
       const url = URL.createObjectURL(new Blob([out.xml], { type: 'application/xml;charset=utf-8' }));
       const a = document.createElement('a');
       a.href = url;
@@ -56,13 +71,14 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
 
   const handleExport = async () => {
     setExportMenu(false);
+    if (!confirmNvpOk()) return;
     setIsExporting(true);
     try {
       const useTemplate = await hasTemplate();
       if (useTemplate) {
-        await fillTemplateAndExport(results, 'Computo_Metrico_Generato.xlsx', state.rawBimOffData);
+        await fillTemplateAndExport(results, 'Computo_Metrico_Generato.xlsx', state.rawBimOffData, hierarchy);
       } else {
-        await exportExcel(results);
+        await exportExcel(results, 'Computo_Metrico.xlsx', hierarchy);
       }
     } catch (err: any) {
       alert(err.message || "Errore durante l'esportazione.");
@@ -82,7 +98,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
     });
   }, [results, search, filterStatus]);
 
-  const depth = useMemo(() => wbsDepth(results), [results]);
+  const cols = useMemo(() => activeItems(hierarchy), [hierarchy]);
   const grandTotal = filtered.reduce((s, r) => s + r.total, 0);
 
   // Aggregations
@@ -108,9 +124,9 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
 
   const TABS = [
     { id: 'computo', label: 'Computo' },
-    { id: 'categoria', label: 'Categoria' },
-    { id: 'livello', label: 'WBS2' },
-    { id: 'edificio', label: 'WBS1' },
+    { id: 'categoria', label: labelOf(hierarchy, 'cat') },
+    { id: 'livello', label: labelOf(hierarchy, 'wbs2') },
+    { id: 'edificio', label: labelOf(hierarchy, 'wbs1') },
     { id: 'dashboard', label: 'Dashboard' },
   ] as const;
 
@@ -127,6 +143,13 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setAddModelOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-violet-900/30 border border-violet-700/40 rounded-xl text-violet-400 text-xs font-bold tracking-widest uppercase hover:bg-violet-900/50 transition-colors"
+          title="Unisci un altro modello Revit (es. FM, LUCE) a questo computo"
+        >
+          <Layers size={14} /> AGGIUNGI MODELLO
+        </button>
         <button
           onClick={handleSaveProject}
           disabled={isSaving}
@@ -188,7 +211,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white dark:bg-[#080C14]">
                 <tr className="text-xs text-gray-500 dark:text-white/40 font-bold tracking-widest uppercase">
-                  {[...Array.from({ length: depth }, (_, i) => `WBS${i + 1}`),'Impianto','Codice','Categoria','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
+                  {[...cols.map(c => c.label),'Codice','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
                     <th key={h} className="px-4 py-3 text-left whitespace-nowrap border-b border-gray-200 dark:border-white/5">{h}</th>
                   ))}
                 </tr>
@@ -213,10 +236,8 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                     <tr key={`parent-${r.idElemento}`}
                       onClick={() => onSelectElement(r.idElemento)}
                       className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200 dark:border-white/5 ${parentBg} font-bold`}>
-                      {Array.from({ length: depth }, (_, i) => <td key={i} className="px-4 py-2.5"></td>)}
-                      <td className="px-4 py-2.5 text-gray-700 dark:text-white/50 text-xs font-semibold">{r.tipoImpianto || ''}</td> {/* Impianto */}
-                      <td className="px-4 py-2.5"></td> {/* Codice - blank */}
-                      <td className="px-4 py-2.5 text-gray-900 dark:text-white text-xs">{r.categoria}</td>
+                      {cols.map(c => <td key={c.id} className="px-4 py-2.5"></td>)}
+                      <td className="px-4 py-2.5"></td>
                       <td className="px-4 py-2.5 text-gray-900 dark:text-white max-w-xs truncate">{r.descrizioneElemento}</td>
                       <td className="px-4 py-2.5 text-gray-900 dark:text-white text-right">{r.quantitaElemento}</td>
                       <td className="px-4 py-2.5 text-gray-900 dark:text-white text-xs">{r.unidade}</td>
@@ -248,10 +269,8 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                         <tr key={`child-${r.idElemento}-${subIdx}`}
                           onClick={() => onSelectElement(r.idElemento)}
                           className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200/50 dark:border-white/[0.02] text-xs text-gray-500 dark:text-white/50 ${childBg}`}>
-                          {Array.from({ length: depth }, (_, i) => <td key={i} className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{wbsLevels(r)[i] ?? ''}</td>)}
-                          <td className="px-4 py-2 text-gray-400 dark:text-white/30 text-[11px]">{r.tipoImpianto || ''}</td> {/* Impianto */}
+                          {cols.map(c => <td key={c.id} className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{dimensionValue(r, c.id)}</td>)}
                           <td className="px-4 py-2 font-mono text-[10px] text-gray-400 dark:text-white/30">{sub.codicePrezzarioTarget || 'NVP'}</td>
-                          <td className="px-4 py-2 text-gray-400 dark:text-white/30">{r.categoria}</td>
                           <td className="px-4 py-2 text-gray-700 dark:text-white/70 max-w-xs truncate pl-6">↳ {sub.descrizionePrezzarioTarget}</td>
                           <td className="px-4 py-2 text-gray-600 dark:text-white/60 text-right">{childQty}</td>
                           <td className="px-4 py-2 text-gray-400 dark:text-white/30">{sub.unidade || (sub as any).um || ''}</td>
@@ -274,7 +293,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
         <div className="flex-1 overflow-auto p-6">
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-gray-500 dark:text-white/40 uppercase tracking-widest border-b border-gray-300 dark:border-white/10">
-              <th className="text-left py-3 px-4">Categoria</th>
+              <th className="text-left py-3 px-4">{labelOf(hierarchy, 'cat')}</th>
               <th className="text-right py-3 px-4">Voci</th>
               <th className="text-right py-3 px-4">Totale (€)</th>
               <th className="text-right py-3 px-4">%</th>
@@ -304,7 +323,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
         <div className="flex-1 overflow-auto p-6">
           <table className="w-full text-sm">
             <thead><tr className="text-xs text-gray-500 dark:text-white/40 uppercase tracking-widest border-b border-gray-300 dark:border-white/10">
-              <th className="text-left py-3 px-4">WBS1</th>
+              <th className="text-left py-3 px-4">{labelOf(hierarchy, 'wbs1')}</th>
               <th className="text-right py-3 px-4">Voci</th>
               <th className="text-right py-3 px-4">Totale (€)</th>
               <th className="text-right py-3 px-4">%</th>
@@ -333,7 +352,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-300 dark:border-white/10">
-                    <th className="text-left py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">WBS2</th>
+                    <th className="text-left py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">{labelOf(hierarchy, 'wbs2')}</th>
                     {edificios.map(ed => <th key={ed} className="text-right py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">{ed}</th>)}
                     <th className="text-right py-3 px-4 text-gray-500 dark:text-white/40 text-xs uppercase">Totale</th>
                   </tr>
@@ -375,9 +394,11 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               </div>
             ))}
           </div>
-          <DashboardRiepilogo results={results} />
+          <DashboardRiepilogo results={results} hierarchy={hierarchy} />
         </div>
       )}
+
+      {addModelOpen && <AddModelDialog onClose={() => setAddModelOpen(false)} />}
 
       {/* Edit NVP Modal */}
       {editingNvpItem && (

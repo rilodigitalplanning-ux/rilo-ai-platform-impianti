@@ -1,4 +1,3 @@
-import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { CmeProvider } from './context/CmeContext';
 import { MainLayout } from './components/layout/MainLayout';

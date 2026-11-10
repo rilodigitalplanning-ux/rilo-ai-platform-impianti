@@ -1,20 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart3, PieChart, X } from 'lucide-react';
 import type { ResultadoItem } from '../types';
-import { wbsDepth } from '../lib/wbs';
-import { dimLabel, filterResults, groupTotals, sumTotal, type DashDim, type Selection } from '../lib/dashboard';
+import { eur } from '../lib/format';
+import { activeItems, labelOf, type HierarchyItem } from '../lib/hierarchy';
+import { filterResults, groupTotals, sumTotal, type DashDim, type Selection } from '../lib/dashboard';
 
 const PALETTE = ['#E94560', '#0F9ED5', '#27AE60', '#F39C12', '#8E44AD', '#16A085', '#D35400', '#2C3E50', '#C0392B', '#7F8C8D'];
-const eur = (v: number) => `€ ${v.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' as any })}`;
 const pct = (v: number, t: number) => (t > 0 ? `${((v / t) * 100).toFixed(1).replace('.', ',')}%` : '0%');
 
 // Riepilogo flessibile: si spuntano livelli WBS e categorie e il grafico si aggiorna sulla selezione.
-export const DashboardRiepilogo: React.FC<{ results: ResultadoItem[] }> = ({ results }) => {
-  const depth = useMemo(() => wbsDepth(results), [results]);
-  const dims = useMemo<DashDim[]>(() => [...Array.from({ length: depth }, (_, i) => `wbs${i + 1}`), 'cat'], [depth]);
+export const DashboardRiepilogo: React.FC<{ results: ResultadoItem[]; hierarchy: HierarchyItem[] }> = ({ results, hierarchy }) => {
+  const dims = useMemo<DashDim[]>(() => activeItems(hierarchy).map(i => i.id), [hierarchy]);
+  const dimLabel = (id: DashDim) => labelOf(hierarchy, id);
 
   const [sel, setSel] = useState<Selection>({});
-  const [groupBy, setGroupBy] = useState<DashDim>('cat');
+  const [groupByRaw, setGroupBy] = useState<DashDim>('cat');
+  const groupBy = dims.includes(groupByRaw) ? groupByRaw : dims[dims.length - 1];
   const [chart, setChart] = useState<'barre' | 'torta'>('barre');
 
   const filtered = useMemo(() => filterResults(results, sel), [results, sel]);

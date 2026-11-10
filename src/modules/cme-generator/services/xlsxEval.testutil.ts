@@ -6,7 +6,7 @@ export type Getter = (sheet: string, addr: string) => CellInfo | undefined;
 const colNum = (s: string) => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
 const colName = (n: number) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 
-export function createEvaluator(get: Getter, defaultSheet: string) {
+export function createEvaluator(get: Getter, _defaultSheet?: string) {
   const memo = new Map<string, number | string>();
 
   const cellValue = (sheet: string, addr: string): number | string => {

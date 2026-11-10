@@ -1,6 +1,6 @@
 // Ricerca testuale condivisa: ogni parola digitata deve comparire in almeno uno dei campi
 // (tariffa/codice, descrizione, prezzario…), senza distinguere maiuscole e minuscole.
-export const searchWords = (q: string) => q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+const searchWords = (q: string) => q.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
 export function matchesQuery(fields: (string | undefined | null)[], q: string): boolean {
   const words = searchWords(q);

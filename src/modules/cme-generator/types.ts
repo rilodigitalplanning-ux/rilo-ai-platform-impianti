@@ -1,3 +1,4 @@
+import type { HierarchyItem } from './lib/hierarchy';
 // ─────────────────────────────────────────────────────────────────────────────
 // src/modules/cmeGenerator/types.ts
 // Domain types for the CME Generator module
@@ -27,6 +28,8 @@ export interface Elemento {
   wbs4?:       string;
   /** Percorso WBS completo (N livelli); edificio/livello/zona/wbs4 ne sono i primi 4 */
   wbs?:        string[];
+  /** Modello Revit di provenienza (es. FM, LUCE) quando il computo unisce più file */
+  modello?:    string;
   /** CME_CATEGORIE della scheda, usata nei riepiloghi dei costi */
   categoriaCme?: string;
   /** Composizione (fino a 5 voci) letta da CME_ELE01..10: codice + fattore per unità di elemento */
@@ -80,6 +83,8 @@ export interface ResultadoItem {
   wbs4?: string;
   /** Percorso WBS completo (N livelli); edificio/livello/zona/wbs4 ne sono i primi 4 */
   wbs?: string[];
+  /** Modello Revit di provenienza (es. FM, LUCE) quando il computo unisce più file */
+  modello?: string;
 }
 
 // ── Prezzario (price list) ────────────────────────────────────────────────────
@@ -100,14 +105,6 @@ export interface PrezzarioRecord {
   totalVoci: number;
 }
 
-// ── In-memory module state ────────────────────────────────────────────────────
-export type CmeAction =
-  | { type: 'ADD_CHAT_MSG'; payload: { id: string; msg: ChatMessage } }
-  | { type: 'SET_RAW_BIM_OFF_DATA'; payload: any[][] | undefined }
-  | { type: 'SET_PROJECT_ID'; payload: { id: string; name: string } | null }
-  | { type: 'LOAD_PROJECT'; payload: any }
-  | { type: 'RESET' };
-
 export interface AgentMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -124,6 +121,8 @@ export interface Snapshot {
 }
 
 export interface CmeState {
+  /** Gerarchia di voce del progetto (ordine, nomi e attivazione dei livelli); assente = predefinita */
+  hierarchy?: HierarchyItem[];
   /** Conversazione con l'assistente IA del progetto (salvata con il progetto) */
   agentChat?: AgentMessage[];
   undoStack?: Snapshot[];
@@ -147,46 +146,3 @@ export interface ChatMessage {
   timestamp: string;
 }
 
-// ── Config (Supabase key-value) ───────────────────────────────────────────────
-export interface CmeConfig {
-  chave: string;
-  valor: string;
-}
-
-// ── Learning system ───────────────────────────────────────────────────────────
-
-/** A confirmed match stored in cme_examples for future AI context injection */
-export interface CmeExample {
-  id?: number;
-  descrizioneElemento: string;
-  codiceDei:           string;
-  descrizioneDei:      string;
-  codiceTarget:        string;
-  descrizioneTarget:   string;
-  valoreUnitario:      number;
-  um:                  string;
-  categoria:           string;
-  scoreConfirmacao:    number; // 1.0 = admin-approved, 0.7 = user-corrected
-  vezesUsado:          number;
-  aprovadoPor?:        string;
-}
-
-/** Summary counts for the review screen */
-export interface ReviewStats {
-  total:          number;
-  ok:             number;
-  alert:          number;
-  naoEncontrado:  number;
-  nvp:            number;
-  aprovados:      number;
-}
-
-/** Per-item decision made during review */
-export type ReviewItemStatus = 'pending' | 'approved' | 'corrected' | 'rejected';
-
-/** ResultadoItem enriched with review decision */
-export interface ResultadoItemReview extends ResultadoItem {
-  reviewStatus:    ReviewItemStatus;
-  correctedValore?: number;     // if user manually changed the price
-  correctedCodice?: string;     // if user manually changed the target code
-}

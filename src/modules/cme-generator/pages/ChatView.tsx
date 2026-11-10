@@ -1,5 +1,5 @@
 // src/modules/cmeGenerator/pages/ChatView.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { chatCommand } from '../services/claudeService';

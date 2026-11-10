@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import {
-  ChevronLeft, Sun, Moon, LogOut, Calculator, Database, BarChart3, ListOrdered, FolderKanban, Library, Save, Loader2, Sparkles,
+  ChevronLeft, Sun, Moon, LogOut, Calculator, Database, BarChart3, ListOrdered, FolderKanban, Library, Save, Loader2, Sparkles, ListTree,
 } from 'lucide-react';
 import { useApp, type AppTab } from '../../context/AppContext';
 import { BYPASS_USER } from '../../lib/currentUser';
 import { useCme } from '../../context/CmeContext';
 import { AgentPanel } from '../AgentPanel';
+import { HierarchyDialog } from '../HierarchyDialog';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useSaveProject } from '../../hooks/useSaveProject';
 import { Toast } from '../../../cme-editor/components/Toast';
@@ -58,6 +59,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   const { save, isSaving } = useSaveProject();
   const { guard, dialog } = useDiscardGuard();
   const [agentOpen, setAgentOpen] = useState(false);
+  const [hierarchyOpen, setHierarchyOpen] = useState(false);
   const goModules = () => guard(() => navigate('/'));
   const hasProject = state.resultados.size > 0;
 
@@ -171,6 +173,16 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
               )}
             </div>
           )}
+          {hasProject && (
+            <button
+              onClick={() => setHierarchyOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-[#efefef] dark:bg-white/5 border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all shadow-sm"
+              title="Ordine e nomi dei livelli del progetto"
+            >
+              <ListTree size={14} />
+              <span className="text-[9px] font-bold uppercase tracking-wider">Livelli</span>
+            </button>
+          )}
           <button
             onClick={() => setAgentOpen(o => !o)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all shadow-sm ${agentOpen ? 'text-white border-transparent' : 'bg-[#efefef] dark:bg-white/5 border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10'}`}
@@ -204,6 +216,7 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
       </main>
 
       {agentOpen && <AgentPanel onClose={() => setAgentOpen(false)} />}
+      {hierarchyOpen && <HierarchyDialog onClose={() => setHierarchyOpen(false)} />}
 
       <div className="fixed bottom-6 right-6 z-50">
         <AnimatePresence>

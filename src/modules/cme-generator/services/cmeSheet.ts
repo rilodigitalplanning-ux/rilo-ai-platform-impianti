@@ -13,7 +13,7 @@ export function isNvpCode(codice: string): boolean {
   return up.split(/[^A-Z0-9]+/).some(tok => tok === 'NP' || /^NP\d+$/.test(tok));
 }
 
-export function isBlankCell(v: unknown): boolean {
+function isBlankCell(v: unknown): boolean {
   const s = String(v ?? '').trim();
   return s === '' || s.toLowerCase() === 'nan' || s === '-';
 }
