@@ -65,15 +65,15 @@ export const ElencoPrezziView: React.FC = () => {
   const nRisorse = rows.filter(r => r.kind === 'risorsa').length;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-[#060A12] text-gray-900 dark:text-white">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#080C14] shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#0B1018] text-slate-900 dark:text-white">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B1018] shrink-0">
         <div className="relative w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Cerca tariffa, descrizione o prezzario…"
-            className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-[12px] outline-none"
+            className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/15 rounded pl-9 pr-3 py-1 text-[12px] outline-none focus:border-[#0F3460]"
           />
         </div>
         <div className="flex gap-1">
@@ -81,57 +81,57 @@ export const ElencoPrezziView: React.FC = () => {
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${filter === f.id ? 'text-white' : 'opacity-50 hover:opacity-100'}`}
-              style={filter === f.id ? { backgroundColor: moduleTheme.accent } : undefined}
+              className={`px-2.5 py-1 rounded text-[12px] font-semibold transition-colors ${filter === f.id ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              
             >
               {f.label}
             </button>
           ))}
         </div>
-        <span className="text-[10px] opacity-40 ml-2">{visible.length} voci</span>
+        <span className="text-[12px] text-slate-500 dark:text-slate-400 ml-2">{visible.length} voci</span>
         <button
           onClick={() => setAdding(true)}
-          className="ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white hover:opacity-90"
-          style={{ backgroundColor: moduleTheme.accent }}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold text-white hover:opacity-90"
+          style={{ backgroundColor: moduleTheme.primary }}
         >
-          <Plus size={14} /> Aggiungi
+          <Plus size={13} /> Aggiungi
         </button>
       </div>
 
       <div className="flex-1 overflow-auto custom-scrollbar">
         <table className="w-full text-[11px]">
-          <thead className="sticky top-0 bg-gray-50 dark:bg-[#060A12] z-10">
-            <tr className="text-left text-[9px] font-bold uppercase tracking-widest opacity-50">
-              <th className="px-6 py-3">Codice</th>
-              <th className="px-3 py-3">Descrizione</th>
-              <th className="px-3 py-3">UM</th>
-              <th className="px-3 py-3">Prezzario</th>
-              <th className="px-3 py-3 text-right">El.</th>
-              <th className="px-3 py-3 text-right">Quantità</th>
-              <th className="px-3 py-3 text-right">Prezzo un.</th>
-              <th className="px-3 py-3 text-right">Importo</th>
-              <th className="px-6 py-3 w-24" />
+          <thead className="sticky top-0 bg-slate-50 dark:bg-[#0E1522] z-10">
+            <tr className="text-left text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              <th className="px-4 py-1.5">Codice</th>
+              <th className="px-3 py-1.5">Descrizione</th>
+              <th className="px-3 py-1.5">UM</th>
+              <th className="px-3 py-1.5">Prezzario</th>
+              <th className="px-3 py-1.5 text-right">El.</th>
+              <th className="px-3 py-1.5 text-right">Quantità</th>
+              <th className="px-3 py-1.5 text-right">Prezzo un.</th>
+              <th className="px-3 py-1.5 text-right">Importo</th>
+              <th className="px-4 py-1.5 w-24" />
             </tr>
           </thead>
           <tbody>
             {visible.map(r => (
-              <tr key={r.key} className="border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5">
-                <td className="px-6 py-2.5 font-mono font-bold whitespace-nowrap">{r.codice || '—'}</td>
-                <td className="px-3 py-2.5 max-w-[420px]">
+              <tr key={r.key} className="border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5">
+                <td className="px-4 py-1.5 font-mono font-bold whitespace-nowrap">{r.codice || '—'}</td>
+                <td className="px-3 py-1.5 max-w-[420px]">
                   <span className="line-clamp-2">{r.descrizione}</span> {kindBadge(r)}{conflictBadge(r)}
                 </td>
-                <td className="px-3 py-2.5">{r.um}</td>
-                <td className="px-3 py-2.5 opacity-70 whitespace-nowrap">{r.prezzario}</td>
-                <td className="px-3 py-2.5 text-right">{r.nElementi}</td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtQty(r.quantita)}</td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap">€ {fmt(r.valoreUnitario)}</td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap font-bold">€ {fmt(r.importo)}</td>
-                <td className="px-6 py-2.5">
+                <td className="px-3 py-1.5">{r.um}</td>
+                <td className="px-3 py-1.5 opacity-70 whitespace-nowrap">{r.prezzario}</td>
+                <td className="px-3 py-1.5 text-right">{r.nElementi}</td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmtQty(r.quantita)}</td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">€ {fmt(r.valoreUnitario)}</td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap font-bold">€ {fmt(r.importo)}</td>
+                <td className="px-4 py-1.5">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => setReplacing(r)} className="p-1.5 rounded-lg hover:bg-black/10 dark:hover:bg-white/10" title="Sostituisci voce">
+                    <button onClick={() => setReplacing(r)} className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/10" title="Sostituisci voce">
                       <Replace size={14} />
                     </button>
-                    <button onClick={() => handleDelete(r)} className="p-1.5 rounded-lg text-red-500 hover:bg-red-500/10" title="Elimina voce">
+                    <button onClick={() => handleDelete(r)} className="p-1 rounded text-red-500 hover:bg-red-500/10" title="Elimina voce">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -139,13 +139,13 @@ export const ElencoPrezziView: React.FC = () => {
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr><td colSpan={9} className="px-6 py-12 text-center opacity-40">Nessuna voce corrisponde alla ricerca.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center opacity-40">Nessuna voce corrisponde alla ricerca.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-white/5 bg-white dark:bg-[#080C14] shrink-0">
+      <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0E1522] shrink-0">
         <span className="text-[10px] opacity-40 uppercase tracking-widest">Totale computo{nRisorse > 0 ? ' · le righe Manodopera/Noleggi sono comprese nelle NVP' : ''}</span>
         <span className="text-sm font-black" style={{ color: moduleTheme.accent }}>€ {fmt(totalAmount)}</span>
       </div>

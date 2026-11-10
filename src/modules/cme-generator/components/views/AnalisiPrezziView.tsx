@@ -57,15 +57,15 @@ export const AnalisiPrezziView: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-[#060A12] text-gray-900 dark:text-white">
-      <div className="flex flex-wrap items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#080C14] shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#0B1018] text-slate-900 dark:text-white">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B1018] shrink-0">
         <div className="relative w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Cerca tariffa NVP o descrizione…"
-            className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-[12px] outline-none"
+            className="w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/15 rounded pl-9 pr-3 py-1 text-[12px] outline-none focus:border-[#0F3460]"
           />
         </div>
         {([
@@ -75,24 +75,24 @@ export const AnalisiPrezziView: React.FC = () => {
           <button
             key={label}
             onClick={() => set(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${on ? 'text-white' : 'opacity-60 hover:opacity-100 border border-black/10 dark:border-white/10'}`}
-            style={on ? { backgroundColor: moduleTheme.accent } : undefined}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] font-semibold transition-colors ${on ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+            
           >
             <AlertTriangle size={12} /> {label} ({n})
           </button>
         ))}
-        <span className="text-[10px] opacity-40">{visible.length} di {groups.length} NVP · {nElementi} element{nElementi === 1 ? 'o' : 'i'}</span>
+        <span className="text-[12px] text-slate-500 dark:text-slate-400">{visible.length} di {groups.length} NVP · {nElementi} element{nElementi === 1 ? 'o' : 'i'}</span>
       </div>
 
       {nConflitti > 0 && (
-        <div className="mx-6 mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[12px] text-red-600 dark:text-red-400 shrink-0">
+        <div className="mx-6 mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-1.5 text-[12px] text-red-600 dark:text-red-400 shrink-0">
           <p className="font-bold flex items-center gap-2"><AlertTriangle size={14} /> {nConflitti} tariff{nConflitti === 1 ? 'a' : 'e'} con testi descrittivi diversi</p>
           <p className="opacity-80 mt-1">La tariffa deve essere univoca: lo stesso codice identifica la stessa voce. Apri le righe segnalate per vedere gli elementi coinvolti e correggi il codice o la descrizione.</p>
         </div>
       )}
 
       {issues.duplicati.length > 0 && (
-        <div className="mx-6 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-700 dark:text-amber-400 shrink-0">
+        <div className="mx-6 mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-[12px] text-amber-700 dark:text-amber-400 shrink-0">
           <p className="font-bold flex items-center gap-2"><AlertTriangle size={14} /> {issues.duplicati.length} possibil{issues.duplicati.length === 1 ? 'e duplicato' : 'i duplicati'}: stessa descrizione con tariffe diverse</p>
           <ul className="opacity-90 mt-1 list-disc pl-5">
             {issues.duplicati.slice(0, 5).map(d => (
@@ -111,18 +111,18 @@ export const AnalisiPrezziView: React.FC = () => {
           </div>
         ) : (
           <table className="w-full text-[11px]">
-            <thead className="sticky top-0 bg-gray-50 dark:bg-[#060A12] z-10">
-              <tr className="text-left text-[9px] font-bold uppercase tracking-widest opacity-50">
-                <th className="px-3 py-3 w-8" />
-                <th className="px-3 py-3">Tariffa</th>
-                <th className="px-3 py-3">Descrizione</th>
-                <th className="px-3 py-3 text-right">El.</th>
-                <th className="px-3 py-3 text-right">Quantità</th>
-                <th className="px-3 py-3">UM</th>
-                <th className="px-3 py-3 text-right">Prezzo un.</th>
-                <th className="px-3 py-3 text-right">Importo</th>
-                <th className="px-3 py-3">Fonte</th>
-                <th className="px-6 py-3 w-16" />
+            <thead className="sticky top-0 bg-slate-50 dark:bg-[#0E1522] z-10">
+              <tr className="text-left text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                <th className="px-3 py-1.5 w-8" />
+                <th className="px-3 py-1.5">Tariffa</th>
+                <th className="px-3 py-1.5">Descrizione</th>
+                <th className="px-3 py-1.5 text-right">El.</th>
+                <th className="px-3 py-1.5 text-right">Quantità</th>
+                <th className="px-3 py-1.5">UM</th>
+                <th className="px-3 py-1.5 text-right">Prezzo un.</th>
+                <th className="px-3 py-1.5 text-right">Importo</th>
+                <th className="px-3 py-1.5">Fonte</th>
+                <th className="px-4 py-1.5 w-16" />
               </tr>
             </thead>
             <tbody>
@@ -130,15 +130,15 @@ export const AnalisiPrezziView: React.FC = () => {
                 const isOpen = open.has(g.key);
                 return (
                   <React.Fragment key={g.key}>
-                    <tr onClick={() => startEdit(g)} className="border-t border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer">
-                      <td className="px-3 py-2.5">
+                    <tr onClick={() => startEdit(g)} className="border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer">
+                      <td className="px-3 py-1.5">
                         <button
                           onClick={e => { e.stopPropagation(); toggle(g.key); }}
                           className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10" title="Mostra gli elementi"
                         >{isOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</button>
                       </td>
-                      <td className="px-3 py-2.5 font-mono font-bold whitespace-nowrap">{g.codice || '—'}</td>
-                      <td className="px-3 py-2.5 max-w-[360px]">
+                      <td className="px-3 py-1.5 font-mono font-bold whitespace-nowrap">{g.codice || '—'}</td>
+                      <td className="px-3 py-1.5 max-w-[360px]">
                         <span className="line-clamp-2">{g.descrizioni[0]}</span>{' '}
                         <span className="inline-flex flex-wrap gap-1">
                           {g.conflitto && <Badge tone="red" title={g.descrizioni.join('\n')}>{g.descrizioni.length} testi diversi</Badge>}
@@ -146,13 +146,13 @@ export const AnalisiPrezziView: React.FC = () => {
                           {g.senzaAnalisi > 0 && <Badge tone="amber">senza analisi{g.senzaAnalisi < g.entries.length ? ` (${g.senzaAnalisi})` : ''}</Badge>}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-right">{g.entries.length}</td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmtQty(g.qty)}</td>
-                      <td className="px-3 py-2.5">{g.entries[0].result.unidade}</td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap">{g.prezzo === null ? <span className="opacity-50">vari</span> : `€ ${fmt(g.prezzo)}`}</td>
-                      <td className="px-3 py-2.5 text-right whitespace-nowrap font-bold">€ {fmt(g.importo)}</td>
-                      <td className="px-3 py-2.5 opacity-70 max-w-[180px] truncate">{g.entries[0].fonte}</td>
-                      <td className="px-6 py-2.5 text-right"><Pencil size={13} className="inline opacity-50" /></td>
+                      <td className="px-3 py-1.5 text-right">{g.entries.length}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmtQty(g.qty)}</td>
+                      <td className="px-3 py-1.5">{g.entries[0].result.unidade}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{g.prezzo === null ? <span className="opacity-50">vari</span> : `€ ${fmt(g.prezzo)}`}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap font-bold">€ {fmt(g.importo)}</td>
+                      <td className="px-3 py-1.5 opacity-70 max-w-[180px] truncate">{g.entries[0].fonte}</td>
+                      <td className="px-4 py-1.5 text-right"><Pencil size={13} className="inline opacity-50" /></td>
                     </tr>
                     {isOpen && g.entries.map(e => (
                       <tr key={e.id} className="bg-black/[0.03] dark:bg-white/[0.03] text-[10.5px]">
@@ -174,14 +174,14 @@ export const AnalisiPrezziView: React.FC = () => {
                 );
               })}
               {visible.length === 0 && (
-                <tr><td colSpan={10} className="px-6 py-12 text-center opacity-40">Nessuna NVP corrisponde ai filtri.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center opacity-40">Nessuna NVP corrisponde ai filtri.</td></tr>
               )}
             </tbody>
           </table>
         )}
       </div>
 
-      <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-white/5 bg-white dark:bg-[#080C14] shrink-0">
+      <div className="flex items-center justify-between px-4 py-1.5 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0E1522] shrink-0">
         <span className="text-[10px] opacity-40 uppercase tracking-widest">
           Importo NVP: € {fmt(nvpTotal)} · {totalAmount > 0 ? Math.round((nvpTotal / totalAmount) * 100) : 0}% del computo
         </span>

@@ -1,25 +1,27 @@
 // src/modules/cmeGenerator/pages/ResultsView.tsx
-import { activeItems, dimensionValue, labelOf } from '../lib/hierarchy';
+import { activeItems, labelOf } from '../lib/hierarchy';
+import { allGroupKeys, buildLedgerRows } from '../lib/ledger';
+import { eur, fmt } from '../lib/format';
 import { useState, useMemo } from 'react';
-import { Download, Search, ChevronDown, FileSpreadsheet, FileCode2, Layers } from 'lucide-react';
+import { Download, Search, ChevronDown, FileSpreadsheet, FileCode2, Layers, Pencil } from 'lucide-react';
 import { useCme } from '../context/CmeContext';
+import { useApp } from '../context/AppContext';
 import { exportExcel } from '../services/excelExporter';
 import { buildXpwe } from '../services/xpweExport';
 import { describeNvpIssues, nvpIssues } from '../services/nvpGroups';
 import { AddModelDialog } from '../components/AddModelDialog';
 import { fillTemplateAndExport } from '../services/excelFiller';
 import { hasTemplate } from '../services/templateService';
-import { useSaveProject } from '../hooks/useSaveProject';
 import { DashboardRiepilogo } from '../components/DashboardRiepilogo';
 import { NvpBuilderModal } from '../components/NvpBuilderModal';
 import { buildNvpResult } from '../services/claudeService';
 import type { StatusItem } from '../types';
 
-const STATUS_BADGE: Record<StatusItem, { label: string; className: string }> = {
-  OK:            { label: 'OK',          className: 'bg-green-900/40 text-green-400 border-green-700/40' },
-  ALERT:         { label: 'ALERT',       className: 'bg-yellow-900/40 text-yellow-400 border-yellow-700/40' },
-  NAO_ENCONTRADO:{ label: 'NON TROVATO', className: 'bg-red-900/40 text-red-400 border-red-700/40' },
-  NVP:           { label: 'NVP',         className: 'bg-cyan-900/40 text-cyan-400 border-cyan-700/40' },
+const STATUS_CHIP: Record<StatusItem, { label: string; className: string }> = {
+  OK:             { label: 'OK',          className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  ALERT:          { label: 'Alert',       className: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300' },
+  NAO_ENCONTRADO: { label: 'Non trovata', className: 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300' },
+  NVP:            { label: 'NVP',         className: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300' },
 };
 
 interface ResultsViewProps { onSelectElement: (id: string) => void }
@@ -34,7 +36,8 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
-  const { save, isSaving } = useSaveProject();
+  const { setHierarchyOpen } = useApp();
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingNvpId, setEditingNvpId] = useState<string | null>(null);
 
   const editingNvpItem = editingNvpId ? state.resultados.get(editingNvpId) || (results.find(x => x.idElemento === editingNvpId)) : null;
@@ -87,8 +90,6 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
     }
   };
 
-  const handleSaveProject = () => { save(); };
-
   const filtered = useMemo(() => {
     return results.filter(r => {
       const matchSearch = !search || [r.descrizioneElemento, r.edificio, r.livello, r.zona, r.categoria]
@@ -130,160 +131,204 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
     { id: 'dashboard', label: 'Dashboard' },
   ] as const;
 
+  const maxTotal = useMemo(() => Math.max(1, ...filtered.map(r => r.total)), [filtered]);
+  const rows = useMemo(() => buildLedgerRows(filtered, cols, collapsed), [filtered, cols, collapsed]);
+  const toggleGroup = (key: string) => setCollapsed(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  const nStatus = (s: StatusItem) => results.filter(r => r.status === s).length;
+
+  const FILTERS: { id: StatusItem | 'ALL'; label: string; n?: number }[] = [
+    { id: 'ALL', label: 'Tutte', n: results.length },
+    { id: 'OK', label: 'OK', n: nStatus('OK') },
+    { id: 'NVP', label: 'NVP', n: nStatus('NVP') },
+    { id: 'ALERT', label: 'Alert', n: nStatus('ALERT') },
+    { id: 'NAO_ENCONTRADO', label: 'Non trovate', n: nStatus('NAO_ENCONTRADO') },
+  ];
+
+  const toolBtn = 'flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold transition-colors border-slate-300 dark:border-white/15 bg-white dark:bg-white/5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10';
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center gap-4 px-6 py-3 border-b border-gray-200 dark:border-white/5">
-        <div className="flex gap-1 flex-1">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#0B1018] text-slate-900 dark:text-slate-100">
+      {/* Sezioni del riepilogo e azioni */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 border-b border-slate-200 dark:border-white/10">
+        <div className="flex gap-0.5">
           {TABS.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                ${tab === t.id ? 'bg-[#E94560]/20 text-[#E94560] border border-[#E94560]/30' : 'text-gray-500 dark:text-white/40 hover:text-gray-700 dark:hover:text-white/70'}`}>
-              {t.label}
-            </button>
+            <button
+              key={t.id} onClick={() => setTab(t.id)}
+              className={`px-3 py-1 rounded text-[12px] font-semibold transition-colors ${tab === t.id ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+            >{t.label}</button>
           ))}
         </div>
-        <button
-          onClick={() => setAddModelOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-900/30 border border-violet-700/40 rounded-xl text-violet-400 text-xs font-bold tracking-widest uppercase hover:bg-violet-900/50 transition-colors"
-          title="Unisci un altro modello Revit (es. FM, LUCE) a questo computo"
-        >
-          <Layers size={14} /> AGGIUNGI MODELLO
-        </button>
-        <button
-          onClick={handleSaveProject}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-900/30 border border-blue-700/40 rounded-xl text-blue-400 text-xs font-bold tracking-widest uppercase hover:bg-blue-900/50 transition-colors disabled:opacity-50"
-        >
-          {isSaving ? 'SALVATAGGIO...' : 'SALVA PROGETTO'}
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => setExportMenu(o => !o)}
-            disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2 bg-green-900/30 border border-green-700/40 rounded-xl text-green-400 text-xs font-bold tracking-widest uppercase hover:bg-green-900/50 transition-colors disabled:opacity-50"
-          >
-            <Download size={14} />
-            {isExporting ? 'ESPORTAZIONE IN CORSO...' : 'ESPORTA'}
-            <ChevronDown size={14} />
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => setAddModelOpen(true)} className={toolBtn} title="Unisci un altro modello Revit (es. FM, LUCE) a questo computo">
+            <Layers size={13} /> Aggiungi modello
           </button>
-          {exportMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setExportMenu(false)} />
-              <div className="absolute right-0 mt-2 w-60 z-50 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#141414] shadow-2xl overflow-hidden text-gray-900 dark:text-white">
-                <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/10">
-                  <FileSpreadsheet size={16} className="text-green-500" />
-                  <span><span className="block text-xs font-bold">Excel</span><span className="block text-[10px] opacity-50">Modello Rilo (.xlsx)</span></span>
-                </button>
-                <button onClick={handleExportXpwe} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-black/5 dark:hover:bg-white/10 border-t border-black/5 dark:border-white/5">
-                  <FileCode2 size={16} className="text-orange-500" />
-                  <span><span className="block text-xs font-bold">XPWE</span><span className="block text-[10px] opacity-50">Interscambio PriMus (.xpwe)</span></span>
-                </button>
-              </div>
-            </>
-          )}
+          <div className="relative">
+            <button
+              onClick={() => setExportMenu(o => !o)}
+              disabled={isExporting}
+              className="flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: '#0F3460' }}
+            >
+              <Download size={13} />
+              {isExporting ? 'Esportazione…' : 'Esporta'}
+              <ChevronDown size={13} />
+            </button>
+            {exportMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setExportMenu(false)} />
+                <div className="absolute right-0 mt-1 w-56 z-50 rounded border border-slate-200 dark:border-white/10 bg-white dark:bg-[#141C2B] shadow-xl overflow-hidden text-slate-900 dark:text-white">
+                  <button onClick={handleExport} className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-white/10">
+                    <FileSpreadsheet size={16} className="text-emerald-600" />
+                    <span><span className="block text-xs font-semibold">Excel</span><span className="block text-[11px] text-slate-500 dark:text-slate-400">Modello Rilo (.xlsx)</span></span>
+                  </button>
+                  <button onClick={handleExportXpwe} className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-100 dark:hover:bg-white/10 border-t border-slate-200 dark:border-white/10">
+                    <FileCode2 size={16} className="text-orange-500" />
+                    <span><span className="block text-xs font-semibold">XPWE</span><span className="block text-[11px] text-slate-500 dark:text-slate-400">Interscambio PriMus (.xpwe)</span></span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Computo tab */}
       {tab === 'computo' && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Filters */}
-          <div className="flex gap-3 px-6 py-3 border-b border-gray-200 dark:border-white/5">
-            <div className="relative flex-1 max-w-xs">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca..."
-                className="w-full bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white" />
-            </div>
-            <div className="flex gap-1">
-              {(['ALL', 'OK', 'ALERT', 'NAO_ENCONTRADO', 'NVP'] as const).map(s => (
-                <button key={s} onClick={() => setFilterStatus(s)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all
-                    ${filterStatus === s ? 'bg-gray-300 dark:bg-white/20 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}>
-                  {s === 'ALL' ? 'TUTTO' : STATUS_BADGE[s].label}
-                </button>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 border-b border-slate-200 dark:border-white/10 text-[12px] text-slate-500 dark:text-slate-400">
+            <div className="flex items-center gap-1.5">
+              <span>Livelli:</span>
+              {cols.map((c, i) => (
+                <span key={c.id} className="flex items-center gap-1.5">
+                  {i > 0 && <span aria-hidden="true">›</span>}
+                  <span className="px-2 py-0.5 rounded border border-slate-300 dark:border-white/15 text-slate-800 dark:text-slate-100">{i + 1} {c.label}</span>
+                </span>
               ))}
+              <button onClick={() => setHierarchyOpen(true)} className="ml-1 underline underline-offset-2 hover:text-slate-800 dark:hover:text-white">modifica</button>
             </div>
-            <span className="text-gray-400 dark:text-white/30 text-xs ml-auto self-center">{filtered.length} voci · €{grandTotal.toFixed(2)}</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setCollapsed(new Set(allGroupKeys(filtered, cols)))} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10">Comprimi</button>
+              <button onClick={() => setCollapsed(new Set())} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10">Espandi</button>
+            </div>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                {FILTERS.map(f => (
+                  <button
+                    key={f.id} onClick={() => setFilterStatus(f.id)}
+                    className={`px-2 py-0.5 rounded text-[12px] ${filterStatus === f.id ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white font-semibold' : 'hover:bg-slate-100 dark:hover:bg-white/10'} ${f.id === 'NAO_ENCONTRADO' && (f.n ?? 0) > 0 ? 'text-red-700 dark:text-red-400' : ''}`}
+                  >{f.label}{f.id !== 'ALL' ? ` ${f.n}` : ''}</button>
+                ))}
+              </div>
+              <div className="relative">
+                <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca…"
+                  className="w-48 bg-white dark:bg-white/5 border border-slate-300 dark:border-white/15 rounded pl-7 pr-2 py-1 text-[12px] text-slate-900 dark:text-white outline-none focus:border-[#0F3460]"
+                />
+              </div>
+            </div>
           </div>
-          {/* Table */}
+
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white dark:bg-[#080C14]">
-                <tr className="text-xs text-gray-500 dark:text-white/40 font-bold tracking-widest uppercase">
-                  {[...cols.map(c => c.label),'Codice','Descrizione','Q.tà','UM','Valore Unit.','Totale','Status'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left whitespace-nowrap border-b border-gray-200 dark:border-white/5">{h}</th>
-                  ))}
+            <table className="w-full text-[12px] border-collapse table-fixed min-w-[900px]">
+              <colgroup>
+                <col style={{ width: 130 }} /><col /><col style={{ width: 70 }} /><col style={{ width: 54 }} />
+                <col style={{ width: 96 }} /><col style={{ width: 190 }} /><col style={{ width: 110 }} />
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-[#0E1522]">
+                <tr className="text-left text-[11px] text-slate-500 dark:text-slate-400">
+                  <th className="px-4 py-1.5 font-semibold border-b border-slate-200 dark:border-white/10">Tariffa</th>
+                  <th className="py-1.5 font-semibold border-b border-slate-200 dark:border-white/10">Descrizione</th>
+                  <th className="py-1.5 font-semibold text-right border-b border-slate-200 dark:border-white/10">Q.tà</th>
+                  <th className="py-1.5 pl-3 font-semibold border-b border-slate-200 dark:border-white/10">UM</th>
+                  <th className="py-1.5 font-semibold text-right border-b border-slate-200 dark:border-white/10">Prezzo</th>
+                  <th className="py-1.5 pl-5 font-semibold border-b border-slate-200 dark:border-white/10">Importo</th>
+                  <th className="py-1.5 pl-3 font-semibold border-b border-slate-200 dark:border-white/10">Stato</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.flatMap((r, i) => {
-                  const badge = STATUS_BADGE[r.status];
-                  const parentBg = i % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-white/[0.01]';
-                  const childBg = i % 2 === 0 ? '' : 'bg-gray-50/30 dark:bg-white/[0.005]';
-
-                  const subItemsList = r.subItems && r.subItems.length > 0 ? r.subItems : [{
-                    codicePrezzarioTarget: r.tariffaOriginal || r.idElemento,
-                    descrizionePrezzarioTarget: r.descrizioneElemento,
-                    unidade: r.unidade || '',
-                    quantitaComposizione: 1,
-                    valoreUnitario: r.valoreUnitario,
-                    status: r.status
-                  }];
-
-                  return [
-                    // 1. Parent Row (Bold, WBS/Codice empty, Revit details)
-                    <tr key={`parent-${r.idElemento}`}
-                      onClick={() => onSelectElement(r.idElemento)}
-                      className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200 dark:border-white/5 ${parentBg} font-bold`}>
-                      {cols.map(c => <td key={c.id} className="px-4 py-2.5"></td>)}
-                      <td className="px-4 py-2.5"></td>
-                      <td className="px-4 py-2.5 text-gray-900 dark:text-white max-w-xs truncate">{r.descrizioneElemento}</td>
-                      <td className="px-4 py-2.5 text-gray-900 dark:text-white text-right">{r.quantitaElemento}</td>
-                      <td className="px-4 py-2.5 text-gray-900 dark:text-white text-xs">{r.unidade}</td>
-                      <td className="px-4 py-2.5 text-gray-700 dark:text-white/70 text-right">€{r.valoreUnitario.toFixed(2)}</td>
-                      <td className="px-4 py-2.5 text-gray-900 dark:text-white font-bold text-right">€{r.total.toFixed(2)}</td>
-                      <td className="px-4 py-2.5">
+                {rows.flatMap(row => {
+                  if (row.kind === 'group') {
+                    const tone = row.depth === 0 ? 'bg-slate-100 dark:bg-[#141D2E]' : row.depth === 1 ? 'bg-slate-50 dark:bg-[#101827]' : 'bg-slate-50/60 dark:bg-[#0E1522]';
+                    return [(
+                      <tr key={`g-${row.key}`} onClick={() => toggleGroup(row.key)} className={`cursor-pointer border-t border-slate-200 dark:border-white/10 ${tone} hover:bg-slate-200/60 dark:hover:bg-white/5`}>
+                        <td colSpan={5} className="py-1.5 font-semibold" style={{ paddingLeft: 16 + row.depth * 18 }}>
+                          <span className="inline-block w-4 text-slate-400">{row.open ? '▾' : '▸'}</span>
+                          {row.label}
+                          <span className="ml-2 font-normal text-[11px] text-slate-500 dark:text-slate-400">{row.level} · {row.count}</span>
+                        </td>
+                        <td className="py-1.5 pl-5 font-mono tabular-nums font-semibold">{eur(row.total)}</td>
+                        <td />
+                      </tr>
+                    )];
+                  }
+                  const r = row.result;
+                  const chip = STATUS_CHIP[r.status];
+                  const subs = r.subItems ?? [];
+                  const single = subs.length === 1 ? subs[0] : null;
+                  const rowTone = r.status === 'NAO_ENCONTRADO' ? 'bg-red-50 dark:bg-red-500/10' : r.status === 'ALERT' ? 'bg-amber-50 dark:bg-amber-500/10' : '';
+                  const pad = 16 + row.depth * 18;
+                  const out = [(
+                    <tr key={`i-${r.idElemento}`} onClick={() => onSelectElement(r.idElemento)} className={`cursor-pointer border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 ${rowTone}`}>
+                      <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate" style={{ paddingLeft: pad }} title={single?.descrizionePrezzarioTarget}>
+                        {single ? (single.codicePrezzarioTarget || 'NVP') : r.status === 'NVP' ? (r.tariffaOriginal || 'NVP') : subs.length > 1 ? `${subs.length} voci` : (r.tariffaOriginal || '—')}
+                      </td>
+                      <td className="py-1.5 pr-3">
+                        <div className="truncate font-medium" title={r.descrizioneElemento}>{r.descrizioneElemento}</div>
+                        {r.status === 'NAO_ENCONTRADO' && r.notes && <div className="truncate text-[11px] text-red-700 dark:text-red-300" title={r.notes}>{r.notes}</div>}
+                      </td>
+                      <td className="py-1.5 text-right font-mono tabular-nums">{r.quantitaElemento.toLocaleString('it-IT', { maximumFractionDigits: 2 })}</td>
+                      <td className="py-1.5 pl-3 text-slate-500 dark:text-slate-400">{r.unidade}</td>
+                      <td className="py-1.5 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">{r.status === 'NAO_ENCONTRADO' ? '—' : fmt(r.valoreUnitario)}</td>
+                      <td className="py-1.5 pl-5">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${badge.className}`}>{badge.label}</span>
+                          <div className="h-1.5 w-14 shrink-0 rounded bg-slate-200 dark:bg-white/10">
+                            <div className="h-1.5 rounded bg-[#0F3460] dark:bg-sky-400" style={{ width: `${Math.max(2, (r.total / maxTotal) * 100)}%` }} />
+                          </div>
+                          <span className="font-mono tabular-nums">{r.status === 'NAO_ENCONTRADO' ? '—' : fmt(r.total)}</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 pl-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${chip.className}`}>{chip.label}</span>
                           {r.status === 'NVP' && (
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingNvpId(r.idElemento);
-                              }}
-                              className="p-1 rounded-md bg-cyan-900/20 text-cyan-400 hover:bg-cyan-900/40 transition-colors"
-                              title="Modifica NVP"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            </button>
+                              onClick={e => { e.stopPropagation(); setEditingNvpId(r.idElemento); }}
+                              className="p-1 rounded text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10" title="Modifica NVP" aria-label="Modifica NVP"
+                            ><Pencil size={12} /></button>
                           )}
                         </div>
                       </td>
-                    </tr>,
-                    // 2. Child Rows (WBS coordinates, prezzario code, prezzario description, composition factors)
-                    ...subItemsList.map((sub, subIdx) => {
-                      const childQty = r.quantitaElemento * (sub.quantitaComposizione || 1);
-                      const childTot = childQty * (sub.valoreUnitario || 0);
-                      return (
-                        <tr key={`child-${r.idElemento}-${subIdx}`}
-                          onClick={() => onSelectElement(r.idElemento)}
-                          className={`cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-b border-gray-200/50 dark:border-white/[0.02] text-xs text-gray-500 dark:text-white/50 ${childBg}`}>
-                          {cols.map(c => <td key={c.id} className="px-4 py-2 text-gray-600 dark:text-white/60 font-semibold">{dimensionValue(r, c.id)}</td>)}
-                          <td className="px-4 py-2 font-mono text-[10px] text-gray-400 dark:text-white/30">{sub.codicePrezzarioTarget || 'NVP'}</td>
-                          <td className="px-4 py-2 text-gray-700 dark:text-white/70 max-w-xs truncate pl-6">↳ {sub.descrizionePrezzarioTarget}</td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-white/60 text-right">{childQty}</td>
-                          <td className="px-4 py-2 text-gray-400 dark:text-white/30">{sub.unidade || (sub as any).um || ''}</td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-white/60 text-right">€{sub.valoreUnitario.toFixed(2)}</td>
-                          <td className="px-4 py-2 text-gray-700 dark:text-white/70 font-semibold text-right">€{childTot.toFixed(2)}</td>
-                          <td className="px-4 py-2"></td>
-                        </tr>
+                    </tr>
+                  )];
+                  if (subs.length > 1) {
+                    subs.forEach((sub, i) => {
+                      const q = r.quantitaElemento * (sub.quantitaComposizione || 1);
+                      out.push(
+                        <tr key={`s-${r.idElemento}-${i}`} onClick={() => onSelectElement(r.idElemento)} className="cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5">
+                          <td className="py-1 font-mono text-[11px] truncate" style={{ paddingLeft: pad + 14 }}>{sub.codicePrezzarioTarget || 'NVP'}</td>
+                          <td className="py-1 pr-3 truncate" title={sub.descrizionePrezzarioTarget}>↳ {sub.descrizionePrezzarioTarget}</td>
+                          <td className="py-1 text-right font-mono tabular-nums">{q.toLocaleString('it-IT', { maximumFractionDigits: 2 })}</td>
+                          <td className="py-1 pl-3">{sub.unidade || (sub as any).um || ''}</td>
+                          <td className="py-1 text-right font-mono tabular-nums">{fmt(sub.valoreUnitario)}</td>
+                          <td className="py-1 pl-5 font-mono tabular-nums">{fmt(q * (sub.valoreUnitario || 0))}</td>
+                          <td />
+                        </tr>,
                       );
-                    })
-                  ];
+                    });
+                  }
+                  return out;
                 })}
+                {rows.length === 0 && (
+                  <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-400">Nessun elemento corrisponde ai filtri.</td></tr>
+                )}
               </tbody>
             </table>
+          </div>
+
+          <div className="shrink-0 flex items-center justify-between px-4 py-1.5 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0E1522] text-[12px] text-slate-500 dark:text-slate-400">
+            <span>{filtered.length.toLocaleString('it-IT')} elementi{filtered.length !== results.length ? ` su ${results.length.toLocaleString('it-IT')}` : ''}</span>
+            <span className="font-mono tabular-nums font-semibold text-slate-900 dark:text-white">Totale {eur(grandTotal)}</span>
           </div>
         </div>
       )}
@@ -380,17 +425,17 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
 
       {/* Dashboard tab */}
       {tab === 'dashboard' && (
-        <div className="flex-1 overflow-auto p-8">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="flex-1 overflow-auto p-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             {[
               { label: 'Totale Generale', value: `€${kpi.total.toFixed(2)}`, color: '#E94560' },
               { label: 'Voci OK', value: kpi.ok, color: '#27ae60' },
               { label: 'Avvisi', value: kpi.alert, color: '#f39c12' },
               { label: 'Non Trovato', value: kpi.nf, color: '#e74c3c' },
             ].map(({ label, value, color }) => (
-              <div key={label} className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
-                <p className="text-gray-500 dark:text-white/40 text-xs uppercase tracking-widest mb-2">{label}</p>
-                <p className="text-2xl font-black" style={{ color }}>{value}</p>
+              <div key={label} className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3">
+                <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-1">{label}</p>
+                <p className="text-xl font-bold font-mono tabular-nums" style={{ color }}>{value}</p>
               </div>
             ))}
           </div>

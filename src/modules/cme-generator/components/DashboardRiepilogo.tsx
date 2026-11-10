@@ -37,9 +37,9 @@ export const DashboardRiepilogo: React.FC<{ results: ResultadoItem[]; hierarchy:
   const chipOn = 'border-transparent bg-[#E94560] text-white';
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
+    <div className="grid grid-cols-1 xl:grid-cols-[300px_1fr] gap-3">
       {/* Filtri: una sezione per livello WBS e per categoria */}
-      <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-4 space-y-5 max-h-[640px] overflow-y-auto custom-scrollbar">
+      <div className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3 space-y-4 max-h-[640px] overflow-y-auto custom-scrollbar">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase">Selezione</h3>
           {nActive > 0 && (
@@ -79,23 +79,23 @@ export const DashboardRiepilogo: React.FC<{ results: ResultadoItem[]; hierarchy:
       </div>
 
       {/* Totale della selezione e grafico */}
-      <div className="space-y-5 min-w-0">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
+      <div className="space-y-3 min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3">
             <p className="text-gray-500 dark:text-white/40 text-xs uppercase tracking-widest mb-2">Totale selezione</p>
-            <p className="text-2xl font-black text-[#E94560]">{eur(selTotal)}</p>
+            <p className="text-xl font-bold font-mono tabular-nums text-[#E94560]">{eur(selTotal)}</p>
           </div>
-          <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
+          <div className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3">
             <p className="text-gray-500 dark:text-white/40 text-xs uppercase tracking-widest mb-2">Elementi</p>
-            <p className="text-2xl font-black text-gray-900 dark:text-white">{filtered.length} <span className="text-sm font-medium opacity-40">/ {results.length}</span></p>
+            <p className="text-xl font-bold font-mono tabular-nums text-gray-900 dark:text-white">{filtered.length} <span className="text-sm font-medium opacity-40">/ {results.length}</span></p>
           </div>
-          <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
+          <div className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3">
             <p className="text-gray-500 dark:text-white/40 text-xs uppercase tracking-widest mb-2">% del computo</p>
-            <p className="text-2xl font-black text-gray-900 dark:text-white">{pct(selTotal, projectTotal)}</p>
+            <p className="text-xl font-bold font-mono tabular-nums text-gray-900 dark:text-white">{pct(selTotal, projectTotal)}</p>
           </div>
         </div>
 
-        <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
+        <div className="bg-white dark:bg-[#101827] border border-slate-200 dark:border-white/10 rounded-lg p-3">
           <div className="flex flex-wrap items-center gap-3 mb-5">
             <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase">Raggruppa per</h3>
             <div className="flex flex-wrap gap-1">

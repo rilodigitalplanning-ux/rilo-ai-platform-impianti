@@ -210,10 +210,10 @@ export const ConsultaBdView: React.FC = () => {
         <div className="p-4">
           <button
             onClick={newConversation}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: accent }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: moduleTheme.primary }}
           >
-            <Plus size={14} /> Nuova conversazione
+            <Plus size={13} /> Nuova conversazione
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5 custom-scrollbar">

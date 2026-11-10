@@ -101,89 +101,97 @@ export function ProjectsView({ onNext, onImported }: ProjectsViewProps) {
     guard(() => { dispatch({ type: 'RESET' }); onNext(); });
   }
 
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+  const btn = 'flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold transition-colors';
+
   return (
-    <div className="flex-1 overflow-auto p-8 space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">I Miei Progetti</h2>
-          <p className="text-gray-500 dark:text-white/40 text-sm">Continua un computo salvato o iniziane uno nuovo.</p>
-        </div>
-        <div className="flex gap-3">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#0B1018] text-slate-900 dark:text-slate-100">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-slate-200 dark:border-white/10">
+        <h2 className="text-[14px] font-bold">Progetti</h2>
+        <span className="text-[12px] text-slate-500 dark:text-slate-400">{projects.length} computi salvati</span>
         <input
           ref={fileRef} type="file" accept=".xpwe,.xml" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void handleImportXpwe(f); }}
         />
-        <button
-          onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-2 px-6 py-3 border border-gray-300 dark:border-white/10 rounded-xl font-bold tracking-widest uppercase text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-        >
-          <FileUp size={18} />
-          Importa XPWE
-        </button>
-        <button
-          onClick={handleNewProject}
-          className="flex items-center gap-2 px-6 py-3 bg-[#E94560] text-white rounded-xl font-bold tracking-widest uppercase text-sm hover:bg-[#E94560]/80 transition-colors"
-        >
-          <Plus size={18} />
-          Nuovo Progetto
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className={`${btn} border border-slate-300 dark:border-white/15 bg-white dark:bg-white/5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10`}
+          >
+            <FileUp size={13} /> Importa XPWE
+          </button>
+          <button onClick={handleNewProject} className={`${btn} text-white`} style={{ backgroundColor: '#0F3460' }}>
+            <Plus size={13} /> Nuovo progetto
+          </button>
         </div>
       </div>
 
       <AnimatePresence>
         {error && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="bg-red-900/30 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm">
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="mx-4 mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] text-red-700 dark:text-red-300"
+          >
             {error}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-20 text-gray-500 dark:text-white/40">
-          <Loader2 size={32} className="animate-spin mb-4" />
-          <p>Caricamento progetti in corso...</p>
-        </div>
-      ) : projects.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-2xl p-16 flex flex-col items-center justify-center text-center">
-          <Folder size={48} className="text-gray-300 dark:text-white/10 mb-4" />
-          <h3 className="text-gray-600 dark:text-white/60 font-bold mb-2">Nessun progetto trovato</h3>
-          <p className="text-gray-400 dark:text-white/30 text-sm max-w-md">
-            Non hai ancora computi salvati. Inizia un nuovo progetto importando il file Revit.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map(p => (
-            <div key={p.id} className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-6 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors flex flex-col">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-gray-900 dark:text-white font-bold text-lg truncate pr-4" title={p.name}>{p.name}</h3>
-                <FolderOpen className="text-[#E94560]" size={24} />
-              </div>
-              <div className="text-gray-500 dark:text-white/40 text-xs space-y-1 mb-6">
-                <p>Aggiornato il: {new Date(p.updated_at).toLocaleString('it-IT')}</p>
-                <p>Creato il: {new Date(p.created_at).toLocaleString('it-IT')}</p>
-              </div>
-              
-              <div className="mt-auto flex gap-3">
-                <button
-                  onClick={() => handleLoadProject(p)}
-                  className="flex-1 bg-white dark:bg-white/10 border border-gray-300 dark:border-transparent hover:bg-gray-50 dark:hover:bg-white/20 text-gray-900 dark:text-white rounded-lg py-2 font-bold text-sm transition-colors"
-                >
-                  Apri
-                </button>
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  disabled={isDeleting === p.id}
-                  className="px-4 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg transition-colors flex items-center justify-center"
-                >
-                  {isDeleting === p.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center p-20 text-slate-500 dark:text-slate-400">
+            <Loader2 size={28} className="animate-spin mb-3" />
+            <p className="text-[12px]">Caricamento progetti in corso…</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center p-16 text-slate-500 dark:text-slate-400">
+            <Folder size={40} className="mb-3 opacity-40" />
+            <h3 className="font-semibold mb-1">Nessun progetto trovato</h3>
+            <p className="text-[12px] max-w-md">Non hai ancora computi salvati. Inizia un nuovo progetto caricando il file di Revit o importando un XPWE.</p>
+          </div>
+        ) : (
+          <table className="w-full text-[12px] border-collapse">
+            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-[#0E1522]">
+              <tr className="text-left text-[11px] text-slate-500 dark:text-slate-400">
+                <th className="px-4 py-1.5 font-semibold border-b border-slate-200 dark:border-white/10">Nome</th>
+                <th className="py-1.5 font-semibold border-b border-slate-200 dark:border-white/10 w-44">Aggiornato</th>
+                <th className="py-1.5 font-semibold border-b border-slate-200 dark:border-white/10 w-44">Creato</th>
+                <th className="py-1.5 px-4 border-b border-slate-200 dark:border-white/10 w-44" />
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map(p => (
+                <tr key={p.id} className="border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5">
+                  <td className="px-4 py-1.5">
+                    <button onClick={() => handleLoadProject(p)} className="flex items-center gap-2 font-semibold hover:underline text-left" title={p.name}>
+                      <FolderOpen size={14} className="text-[#E94560] shrink-0" />
+                      <span className="truncate max-w-[520px]">{p.name}</span>
+                    </button>
+                  </td>
+                  <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">{fmtDate(p.updated_at)}</td>
+                  <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">{fmtDate(p.created_at)}</td>
+                  <td className="py-1.5 px-4">
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        onClick={() => handleLoadProject(p)}
+                        className={`${btn} border border-slate-300 dark:border-white/15 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10`}
+                      >Apri</button>
+                      <button
+                        onClick={() => handleDelete(p.id)}
+                        disabled={isDeleting === p.id}
+                        className="p-1 rounded text-red-500 hover:bg-red-500/10"
+                        title="Elimina progetto" aria-label="Elimina progetto"
+                      >
+                        {isDeleting === p.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
       {dialog}
     </div>
   );

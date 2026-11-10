@@ -57,9 +57,9 @@ export function ComputoMetricoView() {
   ] as const;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-[#060A12] text-gray-900 dark:text-white">
+    <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-[#0B1018] text-slate-900 dark:text-white">
       {/* ── Barra dei passi ── */}
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-gray-200 dark:border-white/5 bg-white dark:bg-[#080C14] shrink-0">
+      <div className="flex items-center gap-3 px-4 py-1.5 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B1018] shrink-0">
         <div className="flex gap-1">
           {NAV.map(step => (
             <button key={step.id}
@@ -67,13 +67,9 @@ export function ComputoMetricoView() {
                 if (step.id === 'results' && state.resultados.size === 0) return;
                 if (step.id !== 'processing') setView(step.id);
               }}
-              className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                ${view === step.id ? 'border' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}
-              style={view === step.id ? {
-                backgroundColor: `${moduleTheme.accent}33`,
-                color: moduleTheme.accent,
-                borderColor: `${moduleTheme.accent}4d`,
-              } : undefined}>
+              className={`px-2.5 py-1 rounded text-[12px] font-semibold transition-colors
+                ${view === step.id ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              style={view === step.id ? { boxShadow: `inset 0 -2px 0 ${moduleTheme.accent}` } : undefined}>
               {step.label}
             </button>
           ))}
@@ -81,12 +77,12 @@ export function ComputoMetricoView() {
 
         {view === 'results' && (
           <>
-            <div className="w-px h-5 bg-gray-200 dark:bg-white/10" />
+            <div className="w-px h-4 bg-slate-200 dark:bg-white/15" />
             <div className="flex gap-1">
               {(['results', 'chat'] as const).map(t => (
                 <button key={t} onClick={() => setActiveTab(t)}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                    ${activeTab === t ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}>
+                  className={`px-2.5 py-1 rounded text-[12px] font-semibold transition-colors
+                    ${activeTab === t ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}>
                   {t === 'results' ? 'Risultati' : 'Chat IA'}
                 </button>
               ))}
@@ -99,10 +95,10 @@ export function ComputoMetricoView() {
           {user.role === 'admin' && (
             <button
               onClick={() => setView('settings')}
-              className={`p-2 rounded-lg transition-colors ${view === 'settings' ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40 hover:text-gray-800 dark:hover:text-white/80 hover:bg-gray-100 dark:hover:bg-white/5'}`}
+              className={`p-1.5 rounded transition-colors ${view === 'settings' ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
               title="Impostazioni"
             >
-              <Settings size={18} />
+              <Settings size={16} />
             </button>
           )}
         </div>
