@@ -155,7 +155,7 @@ function AlertCard({
           </span>
           <button onClick={() => {
             /* reset to pending */
-          }} className="text-gray-500 hover:text-gray-700 dark:text-white/20 dark:hover:text-white/40 text-xs ml-auto">annulla</button>
+          }} className="text-gray-500 hover:text-gray-700 dark:hover:text-white/20 dark:hover:text-white/40 text-xs ml-auto">annulla</button>
         </div>
       )}
     </motion.div>
@@ -236,7 +236,7 @@ export function ReviewView({ user, onFinish, onSkip }: ReviewViewProps) {
           <div className="flex gap-3">
             <button
               onClick={onSkip}
-              className="px-4 py-2 rounded-xl border border-gray-300 dark:border-white/10 text-gray-500 dark:text-white/40 hover:text-gray-600 dark:text-white/60 text-sm transition-colors"
+              className="px-4 py-2 rounded-xl border border-gray-300 dark:border-white/10 text-gray-500 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 text-sm transition-colors"
             >
               Salta revisione
             </button>
@@ -285,7 +285,7 @@ export function ReviewView({ user, onFinish, onSkip }: ReviewViewProps) {
             className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
               ${tab === t.id
                 ? `bg-gray-200 dark:bg-white/10 ${t.color}`
-                : 'text-gray-400 dark:text-white/30 hover:text-gray-500 dark:text-white/50'}`}
+                : 'text-gray-400 dark:text-white/30 hover:text-gray-500 dark:hover:text-white/50'}`}
           >
             {t.label}
           </button>

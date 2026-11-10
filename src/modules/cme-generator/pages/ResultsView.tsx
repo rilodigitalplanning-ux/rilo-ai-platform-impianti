@@ -8,6 +8,7 @@ import { buildXpwe } from '../services/xpweExport';
 import { fillTemplateAndExport } from '../services/excelFiller';
 import { hasTemplate } from '../services/templateService';
 import { useSaveProject } from '../hooks/useSaveProject';
+import { DashboardRiepilogo } from '../components/DashboardRiepilogo';
 import { NvpBuilderModal } from '../components/NvpBuilderModal';
 import { buildNvpResult } from '../services/claudeService';
 import type { ResultadoItem, StatusItem } from '../types';
@@ -121,7 +122,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                ${tab === t.id ? 'bg-[#E94560]/20 text-[#E94560] border border-[#E94560]/30' : 'text-gray-500 dark:text-white/40 hover:text-gray-700 dark:text-white/70'}`}>
+                ${tab === t.id ? 'bg-[#E94560]/20 text-[#E94560] border border-[#E94560]/30' : 'text-gray-500 dark:text-white/40 hover:text-gray-700 dark:hover:text-white/70'}`}>
               {t.label}
             </button>
           ))}
@@ -175,7 +176,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               {(['ALL', 'OK', 'ALERT', 'NAO_ENCONTRADO', 'NVP'] as const).map(s => (
                 <button key={s} onClick={() => setFilterStatus(s)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all
-                    ${filterStatus === s ? 'bg-gray-300 dark:bg-white/20 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:text-white/60'}`}>
+                    ${filterStatus === s ? 'bg-gray-300 dark:bg-white/20 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}>
                   {s === 'ALL' ? 'TUTTO' : STATUS_BADGE[s].label}
                 </button>
               ))}
@@ -280,7 +281,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             </tr></thead>
             <tbody>
               {byCategoria.map(([cat, total]) => (
-                <tr key={cat} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:bg-white/5">
+                <tr key={cat} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/5">
                   <td className="py-3 px-4 text-gray-900 dark:text-white">{cat}</td>
                   <td className="py-3 px-4 text-gray-600 dark:text-white/60 text-right">{results.filter(r => r.categoria === cat).length}</td>
                   <td className="py-3 px-4 text-gray-900 dark:text-white font-bold text-right">€{total.toFixed(2)}</td>
@@ -310,7 +311,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
             </tr></thead>
             <tbody>
               {byEdificio.map(([ed, total]) => (
-                <tr key={ed} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:bg-white/5">
+                <tr key={ed} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/5">
                   <td className="py-3 px-4 text-gray-900 dark:text-white">{ed}</td>
                   <td className="py-3 px-4 text-gray-600 dark:text-white/60 text-right">{results.filter(r => r.edificio === ed).length}</td>
                   <td className="py-3 px-4 text-gray-900 dark:text-white font-bold text-right">€{total.toFixed(2)}</td>
@@ -341,7 +342,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                   {livelli.map(lv => {
                     const lvTotal = results.filter(r => r.livello === lv).reduce((s, r) => s + r.total, 0);
                     return (
-                      <tr key={lv} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:bg-white/5">
+                      <tr key={lv} className="border-b border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/5">
                         <td className="py-3 px-4 text-gray-900 dark:text-white font-bold">{lv}</td>
                         {edificios.map(ed => {
                           const t = results.filter(r => r.livello === lv && r.edificio === ed).reduce((s, r) => s + r.total, 0);
@@ -374,42 +375,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
-              <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase mb-4">Per Categoria</h3>
-              <div className="space-y-3">
-                {byCategoria.slice(0, 8).map(([cat, total]) => (
-                  <div key={cat}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-700 dark:text-white/70 truncate">{cat}</span>
-                      <span className="text-gray-500 dark:text-white/50 ml-2">€{total.toFixed(0)}</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#0F3460] to-[#E94560] rounded-full"
-                        style={{ width: `${kpi.total > 0 ? (total / kpi.total) * 100 : 0}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5">
-              <h3 className="text-xs font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase mb-4">Per WBS1</h3>
-              <div className="space-y-3">
-                {byEdificio.map(([ed, total]) => (
-                  <div key={ed}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-gray-700 dark:text-white/70">{ed}</span>
-                      <span className="text-gray-500 dark:text-white/50">€{total.toFixed(0)}</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full bg-[#E94560] rounded-full"
-                        style={{ width: `${kpi.total > 0 ? (total / kpi.total) * 100 : 0}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <DashboardRiepilogo results={results} />
         </div>
       )}
 

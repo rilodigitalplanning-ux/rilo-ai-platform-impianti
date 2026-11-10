@@ -145,7 +145,7 @@ export function SetupView({
             {(user.role === 'admin') && (
               <button
                 onClick={onGoToSettings}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:bg-white/20 rounded-xl text-sm font-bold transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 rounded-xl text-sm font-bold transition-colors"
               >
                 <Settings size={15} />
                 Vai alle Impostazioni

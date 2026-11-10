@@ -152,7 +152,7 @@ export function ProjectsView({ onNext, onImported }: ProjectsViewProps) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map(p => (
-            <div key={p.id} className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-6 hover:bg-gray-200 dark:bg-white/10 transition-colors flex flex-col">
+            <div key={p.id} className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-6 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <h3 className="text-gray-900 dark:text-white font-bold text-lg truncate pr-4" title={p.name}>{p.name}</h3>
                 <FolderOpen className="text-[#E94560]" size={24} />
@@ -165,7 +165,7 @@ export function ProjectsView({ onNext, onImported }: ProjectsViewProps) {
               <div className="mt-auto flex gap-3">
                 <button
                   onClick={() => handleLoadProject(p)}
-                  className="flex-1 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:bg-white/20 text-gray-900 dark:text-white rounded-lg py-2 font-bold text-sm transition-colors"
+                  className="flex-1 bg-white dark:bg-white/10 border border-gray-300 dark:border-transparent hover:bg-gray-50 dark:hover:bg-white/20 text-gray-900 dark:text-white rounded-lg py-2 font-bold text-sm transition-colors"
                 >
                   Apri
                 </button>

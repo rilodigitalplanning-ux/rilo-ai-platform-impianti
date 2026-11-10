@@ -54,7 +54,7 @@ export function NvpBuilderModal({ elemento, initialNvpDetails, onConfirm, onSkip
             <h3 className="text-gray-900 dark:text-white text-xl font-bold">{elemento.descricao || (elemento as any).descrizioneElemento}</h3>
             <p className="text-gray-500 dark:text-white/40 text-sm">NVP · {elemento.edificio} / {elemento.livello}</p>
           </div>
-          <button onClick={onSkip} className="text-gray-500 dark:text-white/40 hover:text-gray-900 dark:text-white transition-colors">
+          <button onClick={onSkip} className="text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors">
             <X size={24} />
           </button>
         </div>
@@ -88,7 +88,7 @@ export function NvpBuilderModal({ elemento, initialNvpDetails, onConfirm, onSkip
                   <button onClick={() => setMateriali(m => m.filter(x => x.id !== mat.id))} className="text-red-400 hover:text-red-300 mx-auto"><Trash2 size={16} /></button>
                 </div>
               ))}
-              <button onClick={() => setMateriali(m => [...m, { id: Date.now().toString(), descrizione: '', um: 'cad', quantita: 1, prezzoUnitario: 0 }])} className="text-xs text-[#E94560] font-bold tracking-widest uppercase flex items-center gap-1 hover:text-gray-900 dark:text-white transition-colors mt-2">
+              <button onClick={() => setMateriali(m => [...m, { id: Date.now().toString(), descrizione: '', um: 'cad', quantita: 1, prezzoUnitario: 0 }])} className="text-xs text-[#E94560] font-bold tracking-widest uppercase flex items-center gap-1 hover:text-gray-900 dark:hover:text-white transition-colors mt-2">
                 <Plus size={14} /> Aggiungi Materiale
               </button>
             </div>
@@ -174,7 +174,7 @@ export function NvpBuilderModal({ elemento, initialNvpDetails, onConfirm, onSkip
             <div className="text-[#E94560] font-black text-2xl">Totale Finale: € {totaleFinale.toFixed(2)}</div>
           </div>
           <div className="flex gap-3">
-            <button onClick={onSkip} className="px-6 py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white rounded-xl text-sm font-bold transition-colors">
+            <button onClick={onSkip} className="px-6 py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-900 dark:text-white rounded-xl text-sm font-bold transition-colors">
               SALTA NVP
             </button>
             <button 

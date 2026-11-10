@@ -171,7 +171,7 @@ export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
                   </div>
                   <button
                     onClick={handleTemplateDelete}
-                    className="p-2 text-gray-500 dark:text-white/40 hover:text-red-400 hover:bg-gray-100 dark:bg-white/5 rounded-lg transition-colors"
+                    className="p-2 text-gray-500 dark:text-white/40 hover:text-red-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
                     title="Rimuovi il modello"
                   >
                     <Trash2 size={16} />
@@ -183,7 +183,7 @@ export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
                     <br />Il sistema conserva la formattazione durante l'esportazione.
                   </p>
                 </div>
-                <label className="relative overflow-hidden flex items-center justify-center gap-2 px-4 py-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:bg-white/20 text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                <label className="relative overflow-hidden flex items-center justify-center gap-2 px-4 py-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-sm font-medium rounded-lg cursor-pointer transition-colors">
                   <Upload size={14} />
                   {isUploading ? 'Caricamento...' : 'Sostituisci modello'}
                   <input type="file" accept=".xlsx" className="absolute inset-0 opacity-0 cursor-pointer"
@@ -201,7 +201,7 @@ export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
                     Carica il file .xlsx di base per i computi.
                   </p>
                 </div>
-                <label className="relative overflow-hidden px-4 py-2 mt-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:bg-white/20 text-sm font-medium rounded-lg cursor-pointer transition-colors">
+                <label className="relative overflow-hidden px-4 py-2 mt-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-sm font-medium rounded-lg cursor-pointer transition-colors">
                   {isUploading ? 'Caricamento...' : 'Seleziona .xlsx'}
                   <input type="file" accept=".xlsx" className="absolute inset-0 opacity-0 cursor-pointer"
                     onChange={handleTemplateUpload} disabled={isUploading} />
@@ -276,7 +276,7 @@ export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
                     </div>
                     <button
                       onClick={() => handlePrezzarioDelete(p.id!, p.nome)}
-                      className="p-2 text-gray-400 dark:text-white/30 hover:text-red-400 transition-colors rounded-lg hover:bg-gray-100 dark:bg-white/5"
+                      className="p-2 text-gray-400 dark:text-white/30 hover:text-red-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-white/5"
                     >
                       <Trash2 size={15} />
                     </button>

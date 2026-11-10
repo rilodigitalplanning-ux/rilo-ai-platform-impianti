@@ -69,7 +69,7 @@ export function ComputoMetricoView() {
                 if (step.id !== 'processing') setView(step.id);
               }}
               className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                ${view === step.id ? 'border' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:text-white/60'}`}
+                ${view === step.id ? 'border' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}
               style={view === step.id ? {
                 backgroundColor: `${moduleTheme.accent}33`,
                 color: moduleTheme.accent,
@@ -87,7 +87,7 @@ export function ComputoMetricoView() {
               {(['results', 'chat'] as const).map(t => (
                 <button key={t} onClick={() => setActiveTab(t)}
                   className={`px-4 py-2 rounded-lg text-xs font-bold tracking-widest uppercase transition-all
-                    ${activeTab === t ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:text-white/60'}`}>
+                    ${activeTab === t ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/30 hover:text-gray-600 dark:hover:text-white/60'}`}>
                   {t === 'results' ? 'Risultati' : 'Chat IA'}
                 </button>
               ))}
@@ -104,7 +104,7 @@ export function ComputoMetricoView() {
           {user.role === 'admin' && (
             <button
               onClick={() => setView('settings')}
-              className={`p-2 rounded-lg transition-colors ${view === 'settings' ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40 hover:text-gray-800 dark:hover:text-white/80 hover:bg-gray-100 dark:bg-white/5'}`}
+              className={`p-2 rounded-lg transition-colors ${view === 'settings' ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-white/40 hover:text-gray-800 dark:hover:text-white/80 hover:bg-gray-100 dark:hover:bg-white/5'}`}
               title="Impostazioni"
             >
               <Settings size={18} />
