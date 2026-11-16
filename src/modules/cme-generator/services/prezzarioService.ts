@@ -266,6 +266,13 @@ export async function deletePrezzario(id: number): Promise<void> {
   if (error) throw new Error(`Errore nell'eliminazione del prezzario: ${error.message}`);
 }
 
+export async function renamePrezzario(id: number, nome: string): Promise<void> {
+  const n = nome.trim();
+  if (!n) throw new Error('Il nome del prezzario non può essere vuoto.');
+  const { error } = await supabase.from('cme_prezzarios').update({ nome: n }).eq('id', id);
+  if (error) throw new Error(`Errore nella modifica del nome: ${error.message}`);
+}
+
 // ── Load all voci for a prezzario (paginated to handle 30k rows) ───────────────
 export async function loadVoci(prezzarioId: number): Promise<PrezzarioVoce[]> {
   const PAGE = 1000;

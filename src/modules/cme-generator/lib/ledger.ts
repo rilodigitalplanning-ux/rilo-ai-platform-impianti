@@ -4,7 +4,7 @@ import type { ResultadoItem } from '../types';
 import { dimensionValue, type HierarchyItem } from './hierarchy';
 
 export type LedgerRow =
-  | { kind: 'group'; key: string; depth: number; label: string; level: string; count: number; total: number; open: boolean }
+  | { kind: 'group'; key: string; depth: number; label: string; level: string; count: number; total: number; open: boolean; ids: string[] }
   | { kind: 'item'; depth: number; result: ResultadoItem };
 
 interface Node {
@@ -15,13 +15,14 @@ interface Node {
   items: ResultadoItem[];
   count: number;
   total: number;
+  ids: string[];
 }
 
 const SEP = '\u0001';
 const collator = new Intl.Collator('it', { numeric: true, sensitivity: 'base' });
 
 export function buildLedgerRows(results: ResultadoItem[], levels: HierarchyItem[], collapsed: Set<string>): LedgerRow[] {
-  const root: Node = { key: '', label: '', level: '', children: new Map(), items: [], count: 0, total: 0 };
+  const root: Node = { key: '', label: '', level: '', children: new Map(), items: [], count: 0, total: 0, ids: [] };
 
   for (const r of results) {
     let node = root;
@@ -32,10 +33,10 @@ export function buildLedgerRows(results: ResultadoItem[], levels: HierarchyItem[
       const key = node.key + SEP + lv.id + ':' + v;
       let child = node.children.get(key);
       if (!child) {
-        child = { key, label: v, level: lv.label, children: new Map(), items: [], count: 0, total: 0 };
+        child = { key, label: v, level: lv.label, children: new Map(), items: [], count: 0, total: 0, ids: [] };
         node.children.set(key, child);
       }
-      child.count++; child.total += r.total;
+      child.count++; child.total += r.total; child.ids.push(r.idElemento);
       node = child;
     }
     node.items.push(r);
@@ -47,7 +48,7 @@ export function buildLedgerRows(results: ResultadoItem[], levels: HierarchyItem[
     const kids = [...node.children.values()].sort((a, b) => collator.compare(a.label, b.label));
     for (const g of kids) {
       const open = !collapsed.has(g.key);
-      rows.push({ kind: 'group', key: g.key, depth, label: g.label, level: g.level, count: g.count, total: g.total, open });
+      rows.push({ kind: 'group', key: g.key, depth, label: g.label, level: g.level, count: g.count, total: g.total, open, ids: g.ids });
       if (open) walk(g, depth + 1);
     }
   };

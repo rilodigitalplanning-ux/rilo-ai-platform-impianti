@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Library, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Library, Loader2, RefreshCw, Pencil } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { listPrezzarios, deletePrezzario } from '../../services/prezzarioService';
+import { listPrezzarios, deletePrezzario, renamePrezzario } from '../../services/prezzarioService';
 import { UploadPrezzarioModal } from '../UploadPrezzarioModal';
 import type { PrezzarioRecord } from '../../types';
 
@@ -41,7 +41,23 @@ export const PrezzariView: React.FC = () => {
     }
   }
 
-  const totalVoci = prezzari.reduce((s, p) => s + p.totalVoci, 0);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+
+  async function commitRename(p: PrezzarioRecord) {
+    const nome = draft.trim();
+    setEditingId(null);
+    if (!nome || nome === p.nome) return;
+    try {
+      await renamePrezzario(p.id!, nome);
+      showToast('Nome del prezzario aggiornato.', 'success');
+      bumpPrezzari();
+    } catch (e: any) {
+      showToast(e?.message || String(e), 'error');
+    }
+  }
+
+  const totalVoci =prezzari.reduce((s, p) => s + p.totalVoci, 0);
 
   const btn = 'flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-semibold transition-colors';
 
@@ -98,12 +114,25 @@ export const PrezzariView: React.FC = () => {
                   <td className="px-4 py-1.5">
                     <div className="flex items-center gap-2 font-semibold">
                       <Library size={14} className="shrink-0" style={{ color: moduleTheme.accent }} />
-                      <span className="truncate max-w-[560px]">{p.nome}</span>
+                      {editingId === p.id ? (
+                        <input
+                          autoFocus onFocus={e => e.target.select()} value={draft} onChange={e => setDraft(e.target.value)}
+                          onBlur={() => commitRename(p)}
+                          onKeyDown={e => { if (e.key === 'Enter') commitRename(p); if (e.key === 'Escape') setEditingId(null); }}
+                          className="w-[420px] max-w-full bg-white dark:bg-white/5 border border-slate-300 dark:border-white/20 rounded px-2 py-0.5 text-[12px] outline-none focus:border-[#0F3460]"
+                        />
+                      ) : (
+                        <span className="truncate max-w-[560px]">{p.nome}</span>
+                      )}
                     </div>
                   </td>
                   <td className="py-1.5 text-right font-mono tabular-nums">{p.totalVoci.toLocaleString('it-IT')}</td>
                   <td className="py-1.5 pl-6 font-mono text-[11px] text-slate-600 dark:text-slate-300">{new Date(p.dataImport).toLocaleDateString('it-IT')}</td>
-                  <td className="px-4 py-1.5 text-right">
+                  <td className="px-4 py-1.5 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => { setDraft(p.nome); setEditingId(p.id!); }}
+                      className="p-1 mr-1 rounded text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10" title="Rinomina" aria-label="Rinomina"
+                    ><Pencil size={14} /></button>
                     <button
                       onClick={() => handleDelete(p)} disabled={deletingId === p.id}
                       className="p-1 rounded text-red-500 hover:bg-red-500/10 disabled:opacity-40" title="Elimina" aria-label="Elimina"

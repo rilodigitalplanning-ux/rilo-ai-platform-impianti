@@ -11,16 +11,21 @@ import type { ResultadoItem } from '../types';
 interface Props {
   row: VoceRow;
   results: ResultadoItem[];
-  onApply: (changes: Changes) => void;
+  onApply: (changes: Changes, scope: 'one' | 'all') => void;
+  /** Se presente, si può scegliere di sostituire solo questo elemento o tutte le voci uguali */
+  scopeId?: string;
   onClose: () => void;
 }
 
 
-export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onClose }) => {
+export const ReplaceVoceDialog: React.FC<Props> = ({ row, results: allResults, onApply, onClose, scopeId }) => {
   const { moduleTheme } = useApp();
   const [tab, setTab] = useState<'prezzario' | 'nvp'>('prezzario');
   const [selected, setSelected] = useState<VoceChoice | null>(null);
   const [showNvp, setShowNvp] = useState(false);
+  const [scope, setScope] = useState<'one' | 'all'>(scopeId ? 'one' : 'all');
+  const results = useMemo(() => (scope === 'one' && scopeId ? allResults.filter(r => r.idElemento === scopeId) : allResults), [allResults, scope, scopeId]);
+  const nTarget = scope === 'one' && scopeId ? 1 : row.nElementi;
 
   const preview = useMemo(() => {
     if (!selected) return null;
@@ -36,7 +41,7 @@ export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onCl
       <NvpBuilderModal
         elemento={{ descricao: row.descrizione, descrizioneElemento: row.descrizione, edificio: `${row.nElementi} elementi`, edifcio: '', livello: 'sostituzione in blocco' } as any}
         onConfirm={(valoreUnitario, originePrezzo, nvpDetails) => {
-          onApply(replaceVoce(results, row.key, { kind: 'nvp', valoreUnitario, fonte: originePrezzo, nvpDetails }));
+          onApply(replaceVoce(results, row.key, { kind: 'nvp', valoreUnitario, fonte: originePrezzo, nvpDetails }), scope);
         }}
         onSkip={() => setShowNvp(false)}
       />
@@ -64,6 +69,18 @@ export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onCl
               Usata in {row.nElementi} element{row.nElementi === 1 ? 'o' : 'i'} · {row.quantita.toLocaleString('it-IT', { maximumFractionDigits: 2 })} {row.um} · {eur(row.importo)}
             </p>
           </div>
+
+          {scopeId && (
+            <div className="grid grid-cols-2 gap-2">
+              {([['one', 'Solo questo elemento'], ['all', `Tutte le voci uguali (${row.nElementi} element${row.nElementi === 1 ? 'o' : 'i'})`]] as const).map(([id, label]) => (
+                <button
+                  key={id} onClick={() => setScope(id)}
+                  className={`px-3 py-2 rounded-xl border text-left text-[11px] font-semibold transition-colors ${scope === id ? 'border-transparent text-white' : 'border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5'}`}
+                  style={scope === id ? { backgroundColor: moduleTheme.accent } : undefined}
+                >{label}</button>
+              ))}
+            </div>
+          )}
 
           <div className="flex gap-1">
             {([['prezzario', 'Da prezzario'], ['nvp', 'Come NVP']] as const).filter(([id]) => id === 'prezzario' || row.kind !== 'risorsa').map(([id, label]) => (
@@ -97,7 +114,7 @@ export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onCl
             <div className="rounded-xl border border-dashed border-black/15 dark:border-white/15 p-6 text-center space-y-3">
               <p className="text-[12px] opacity-60">
                 La voce diventa una Nuova Voce di Prezzo (NVP): configuri l'analisi (materiali, manodopera, noleggi, spese generali, utili)
-                e viene applicata a tutti gli elementi che la usano ({row.nElementi}).
+                e viene applicata a {nTarget} element{nTarget === 1 ? 'o' : 'i'}.
               </p>
               <button
                 onClick={() => setShowNvp(true)}
@@ -117,11 +134,11 @@ export const ReplaceVoceDialog: React.FC<Props> = ({ row, results, onApply, onCl
           {tab === 'prezzario' && (
             <button
               disabled={!selected}
-              onClick={() => selected && onApply(replaceVoce(results, row.key, { kind: 'voce', voce: selected }))}
+              onClick={() => selected && onApply(replaceVoce(results, row.key, { kind: 'voce', voce: selected }), scope)}
               className="px-5 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest text-white disabled:opacity-30"
               style={{ backgroundColor: moduleTheme.accent }}
             >
-              Applica a {row.nElementi} element{row.nElementi === 1 ? 'o' : 'i'}
+              Applica a {nTarget} element{nTarget === 1 ? 'o' : 'i'}
             </button>
           )}
         </div>

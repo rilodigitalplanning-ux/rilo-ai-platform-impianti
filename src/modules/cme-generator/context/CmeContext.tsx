@@ -2,7 +2,7 @@
 // src/modules/cmeGenerator/context/CmeContext.tsx
 // Global state for the CME Generator module
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useMemo, useEffect } from 'react';
 import type { Elemento, ResultadoItem, CmeState, ChatMessage, AgentMessage } from '../types';
 import { resolveHierarchy, type HierarchyItem } from '../lib/hierarchy';
 
@@ -11,12 +11,12 @@ type Action =
   | { type: 'SET_PROCESSING'; payload: boolean }
   | { type: 'SET_PROGRESS'; payload: CmeState['progress'] }
   | { type: 'ADD_RESULTADO'; payload: ResultadoItem }
-  | { type: 'APPLY_OVERRIDE'; payload: { id: string; changes: Partial<ResultadoItem> } }
+  | { type: 'APPLY_OVERRIDE'; payload: { id: string; changes: Partial<ResultadoItem>; label?: string } }
   | { type: 'ADD_CHAT_MSG'; payload: { id: string; msg: ChatMessage } }
   | { type: 'SET_RAW_BIM_OFF_DATA'; payload: any[][] | undefined }
   | { type: 'SET_PROJECT_ID'; payload: { id: string; name: string } | null }
   | { type: 'LOAD_PROJECT'; payload: any }
-  | { type: 'APPLY_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[] } }
+  | { type: 'APPLY_CHANGES'; payload: { upsert: ResultadoItem[]; remove: string[]; label?: string } }
   | { type: 'IMPORT_PROJECT'; payload: { name: string; resultados: ResultadoItem[]; hierarchy?: HierarchyItem[] } }
   | { type: 'MARK_SAVED' }
   | { type: 'AGENT_ADD_MSG'; payload: AgentMessage }
@@ -37,7 +37,13 @@ const initialState: CmeState = {
   dirty:       false,
 };
 
-const MAX_UNDO = 30;
+const MAX_UNDO = 100;
+
+// Ogni modifica ai risultati conserva un'istantanea per Annulla/Ripeti
+const withSnap = (state: CmeState, label: string) => ({
+  undoStack: [...(state.undoStack ?? []), { label, resultados: state.resultados, overrides: state.overrides }].slice(-MAX_UNDO),
+  redoStack: [],
+});
 
 export function cmeReducer(state: CmeState, action: Action): CmeState {
   switch (action.type) {
@@ -50,13 +56,13 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
     case 'ADD_RESULTADO': {
       const next = new Map(state.resultados);
       next.set(action.payload.idElemento, action.payload);
-      return { ...state, resultados: next, dirty: true };
+      return { ...state, resultados: next, dirty: true, ...withSnap(state, 'Nuovo elemento') };
     }
     case 'APPLY_OVERRIDE': {
       const overrides = new Map(state.overrides);
       const existing  = overrides.get(action.payload.id) ?? {};
       overrides.set(action.payload.id, { ...existing, ...action.payload.changes });
-      return { ...state, overrides, dirty: true };
+      return { ...state, overrides, dirty: true, ...withSnap(state, action.payload.label ?? 'Modifica elemento') };
     }
     case 'ADD_CHAT_MSG': {
       const history = new Map(state.chatHistory);
@@ -77,7 +83,7 @@ export function cmeReducer(state: CmeState, action: Action): CmeState {
         resultados.delete(id);
         overrides.delete(id);
       }
-      return { ...state, resultados, overrides, dirty: true };
+      return { ...state, resultados, overrides, dirty: true, ...withSnap(state, action.payload.label ?? 'Modifica del computo') };
     }
     case 'IMPORT_PROJECT':
       // Progetto nuovo da file esterno (XPWE): non ancora salvato
@@ -166,6 +172,20 @@ const CmeContext = createContext<CmeContextType | null>(null);
 
 export function CmeProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(cmeReducer, initialState);
+
+  // Ctrl+Z annulla, Ctrl+Y / Ctrl+Shift+Z ripete (nei campi di testo vale l'annulla del campo)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); dispatch({ type: 'UNDO' }); }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); dispatch({ type: 'REDO' }); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const getEffectiveResult = useCallback((id: string): ResultadoItem | undefined => {
     const original = state.resultados.get(id);

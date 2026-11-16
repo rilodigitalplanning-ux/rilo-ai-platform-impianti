@@ -33,7 +33,7 @@ export const ElencoPrezziView: React.FC = () => {
   if (state.resultados.size === 0) return <EmptyProjectNotice title="Elenco Prezzi" />;
 
   function apply(changes: Changes, message: string) {
-    dispatch({ type: 'APPLY_CHANGES', payload: changes });
+    dispatch({ type: 'APPLY_CHANGES', payload: { ...changes, label: message } });
     showToast(message, 'success');
   }
 

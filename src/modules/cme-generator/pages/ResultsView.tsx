@@ -3,7 +3,7 @@ import { activeItems, labelOf } from '../lib/hierarchy';
 import { allGroupKeys, buildLedgerRows } from '../lib/ledger';
 import { eur, fmt } from '../lib/format';
 import { useState, useMemo } from 'react';
-import { Download, Search, ChevronDown, FileSpreadsheet, FileCode2, Layers, Pencil } from 'lucide-react';
+import { Download, Search, ChevronDown, FileSpreadsheet, FileCode2, Layers, Pencil, Trash2, Repeat, Hash, ChevronsUpDown } from 'lucide-react';
 import { useCme } from '../context/CmeContext';
 import { useApp } from '../context/AppContext';
 import { exportExcel } from '../services/excelExporter';
@@ -15,7 +15,11 @@ import { hasTemplate } from '../services/templateService';
 import { DashboardRiepilogo } from '../components/DashboardRiepilogo';
 import { NvpBuilderModal } from '../components/NvpBuilderModal';
 import { buildNvpResult } from '../services/claudeService';
-import type { StatusItem } from '../types';
+import { ContextMenu, type MenuItem } from '../components/ContextMenu';
+import { ReplaceVoceDialog } from '../components/ReplaceVoceDialog';
+import { elementKey, groupVoci, recomputeResult, subKey, type Changes, type VoceRow } from '../services/pricing';
+import { toNumber } from '../services/cmeSheet';
+import type { ResultadoItem, StatusItem } from '../types';
 
 const STATUS_CHIP: Record<StatusItem, { label: string; className: string }> = {
   OK:             { label: 'OK',          className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300' },
@@ -37,9 +41,58 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
-  const { setHierarchyOpen } = useApp();
+  const { setHierarchyOpen, showToast } = useApp();
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const [replaceTarget, setReplaceTarget] = useState<{ row: VoceRow; scopeId: string } | null>(null);
+  const [editingQty, setEditingQty] = useState<{ id: string; draft: string } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingNvpId, setEditingNvpId] = useState<string | null>(null);
+
+  // Modifiche dirette al computo: ognuna è annullabile con Ctrl+Z
+  const applyChanges = (changes: Changes, label: string) => {
+    dispatch({ type: 'APPLY_CHANGES', payload: { ...changes, label } });
+    showToast(`${label} · Ctrl+Z per annullare`, 'success');
+  };
+  const commitQty = (r: ResultadoItem) => {
+    const q = toNumber(editingQty?.draft, NaN);
+    setEditingQty(null);
+    if (!(q >= 0) || q === r.quantitaElemento) return;
+    applyChanges({ upsert: [recomputeResult({ ...r, quantitaElemento: q })], remove: [] }, `Quantità modificata: ${r.descrizioneElemento}`);
+  };
+  const askDelete = (ids: string[], what: string) => {
+    if (ids.length > 1 && !window.confirm(`Eliminare ${what} e i suoi ${ids.length} elementi dal computo?
+
+Puoi annullare con Ctrl+Z.`)) return;
+    applyChanges({ upsert: [], remove: ids }, ids.length === 1 ? `Elemento eliminato: ${what}` : `${ids.length} elementi eliminati (${what})`);
+  };
+  const openItemMenu = (e: React.MouseEvent, r: ResultadoItem) => {
+    e.preventDefault();
+    const keys = (r.subItems.length === 0 ? [elementKey(r)] : r.subItems.map(sub => subKey(r, sub)));
+    const all = groupVoci(results);
+    const items: MenuItem[] = [
+      { header: true, label: r.descrizioneElemento },
+      { label: 'Modifica quantità', icon: <Hash size={13} />, onClick: () => setEditingQty({ id: r.idElemento, draft: String(r.quantitaElemento).replace('.', ',') }) },
+    ];
+    [...new Set(keys)].forEach(k => {
+      const row = all.find(v => v.key === k);
+      if (!row) return;
+      items.push({
+        label: keys.length > 1 ? `Sostituisci voce ${row.codice || row.descrizione.slice(0, 24)}…` : 'Sostituisci voce…',
+        icon: <Repeat size={13} />, onClick: () => setReplaceTarget({ row, scopeId: r.idElemento }),
+      });
+    });
+    if (r.status === 'NVP') items.push({ label: 'Modifica NVP…', icon: <Pencil size={13} />, onClick: () => setEditingNvpId(r.idElemento) });
+    items.push({ label: 'Elimina elemento', icon: <Trash2 size={13} />, danger: true, onClick: () => askDelete([r.idElemento], r.descrizioneElemento) });
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+  const openGroupMenu = (e: React.MouseEvent, g: { key: string; label: string; level: string; count: number; open: boolean; ids: string[] }) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, items: [
+      { header: true, label: `${g.level}: ${g.label} · ${g.count} elementi` },
+      { label: g.open ? 'Comprimi' : 'Espandi', icon: <ChevronsUpDown size={13} />, onClick: () => toggleGroup(g.key) },
+      { label: `Elimina "${g.label}" e i suoi ${g.count} elementi`, icon: <Trash2 size={13} />, danger: true, onClick: () => askDelete(g.ids, `${g.level} "${g.label}"`) },
+    ] });
+  };
 
   const editingNvpItem = editingNvpId ? state.resultados.get(editingNvpId) || (results.find(x => x.idElemento === editingNvpId)) : null;
 
@@ -264,7 +317,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                   if (row.kind === 'group') {
                     const tone = row.depth === 0 ? 'bg-slate-100 dark:bg-[#141D2E]' : row.depth === 1 ? 'bg-slate-50 dark:bg-[#101827]' : 'bg-slate-50/60 dark:bg-[#0E1522]';
                     return [(
-                      <tr key={`g-${row.key}`} onClick={() => toggleGroup(row.key)} className={`cursor-pointer border-t border-slate-200 dark:border-white/10 ${tone} hover:bg-slate-200/60 dark:hover:bg-white/5`}>
+                      <tr key={`g-${row.key}`} onClick={() => toggleGroup(row.key)} onContextMenu={e => openGroupMenu(e, row)} className={`cursor-pointer border-t border-slate-200 dark:border-white/10 ${tone} hover:bg-slate-200/60 dark:hover:bg-white/5`}>
                         <td colSpan={5} className="py-1.5 font-semibold" style={{ paddingLeft: 16 + row.depth * 18 }}>
                           <span className="inline-block w-4 text-slate-400">{row.open ? '▾' : '▸'}</span>
                           {row.label}
@@ -282,7 +335,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                   const rowTone = r.status === 'NAO_ENCONTRADO' ? 'bg-red-50 dark:bg-red-500/10' : r.status === 'ALERT' ? 'bg-amber-50 dark:bg-amber-500/10' : '';
                   const pad = 16 + row.depth * 18;
                   const out = [(
-                    <tr key={`i-${r.idElemento}`} onClick={() => onSelectElement(r.idElemento)} className={`cursor-pointer border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 ${rowTone}`}>
+                    <tr key={`i-${r.idElemento}`} onClick={() => onSelectElement(r.idElemento)} onContextMenu={e => openItemMenu(e, r)} className={`cursor-pointer border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 ${rowTone}`}>
                       <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate" style={{ paddingLeft: pad }} title={single?.descrizionePrezzarioTarget}>
                         {single ? (single.codicePrezzarioTarget || 'NVP') : r.status === 'NVP' ? (r.tariffaOriginal || 'NVP') : subs.length > 1 ? `${subs.length} voci` : (r.tariffaOriginal || '—')}
                       </td>
@@ -295,7 +348,17 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                         </div>
                         {r.status === 'NAO_ENCONTRADO' && r.notes && <div className="truncate text-[11px] text-red-700 dark:text-red-300" title={r.notes}>{r.notes}</div>}
                       </td>
-                      <td className="py-1.5 text-right font-mono tabular-nums">{r.quantitaElemento.toLocaleString('it-IT', { maximumFractionDigits: 2 })}</td>
+                      <td className="py-1.5 text-right font-mono tabular-nums" onClick={e => { if (editingQty?.id === r.idElemento) e.stopPropagation(); }} onDoubleClick={e => { e.stopPropagation(); setEditingQty({ id: r.idElemento, draft: String(r.quantitaElemento).replace('.', ',') }); }} title="Doppio clic per modificare la quantità">
+                        {editingQty?.id === r.idElemento ? (
+                          <input
+                            autoFocus onFocus={e => e.target.select()} value={editingQty.draft}
+                            onChange={e => setEditingQty({ id: r.idElemento, draft: e.target.value })}
+                            onBlur={() => commitQty(r)}
+                            onKeyDown={e => { if (e.key === 'Enter') commitQty(r); if (e.key === 'Escape') setEditingQty(null); }}
+                            className="w-[64px] text-right bg-white dark:bg-white/10 border border-[#0F3460] rounded px-1 py-0 text-[12px] outline-none"
+                          />
+                        ) : r.quantitaElemento.toLocaleString('it-IT', { maximumFractionDigits: 2 })}
+                      </td>
                       <td className="py-1.5 pl-3 text-slate-500 dark:text-slate-400">{r.unidade}</td>
                       <td className="py-1.5 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300">{r.status === 'NAO_ENCONTRADO' ? '—' : fmt(r.valoreUnitario)}</td>
                       <td className="py-1.5 pl-5">
@@ -323,7 +386,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                     subs.forEach((sub, i) => {
                       const q = r.quantitaElemento * (sub.quantitaComposizione || 1);
                       out.push(
-                        <tr key={`s-${r.idElemento}-${i}`} onClick={() => onSelectElement(r.idElemento)} className="cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5">
+                        <tr key={`s-${r.idElemento}-${i}`} onClick={() => onSelectElement(r.idElemento)} onContextMenu={e => openItemMenu(e, r)} className="cursor-pointer text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5">
                           <td className="py-1 font-mono text-[11px] truncate" style={{ paddingLeft: pad + 14 }}>{sub.codicePrezzarioTarget || 'NVP'}</td>
                           <td className="py-1 pr-3 truncate" title={sub.descrizionePrezzarioTarget}>↳ {sub.descrizionePrezzarioTarget}</td>
                           <td className="py-1 text-right font-mono tabular-nums">{q.toLocaleString('it-IT', { maximumFractionDigits: 2 })}</td>
@@ -461,6 +524,17 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
         </div>
       )}
 
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {replaceTarget && (
+        <ReplaceVoceDialog
+          row={replaceTarget.row} results={results} scopeId={replaceTarget.scopeId}
+          onClose={() => setReplaceTarget(null)}
+          onApply={(changes, scope) => {
+            applyChanges(changes, `Voce sostituita in ${changes.upsert.length} element${changes.upsert.length === 1 ? 'o' : 'i'}${scope === 'one' ? '' : ' (tutte le voci uguali)'}`);
+            setReplaceTarget(null);
+          }}
+        />
+      )}
       {addModelOpen && <AddModelDialog onClose={() => setAddModelOpen(false)} />}
 
       {/* Edit NVP Modal */}
