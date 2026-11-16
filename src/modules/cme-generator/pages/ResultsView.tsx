@@ -33,6 +33,7 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [tab, setTab] = useState<'computo' | 'categoria' | 'livello' | 'edificio' | 'dashboard'>('computo');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<StatusItem | 'ALL'>('ALL');
+  const [filterBim, setFilterBim] = useState<'ALL' | 'BIM ON' | 'BIM OFF'>('ALL');
   const [isExporting, setIsExporting] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
@@ -95,9 +96,11 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
       const matchSearch = !search || [r.descrizioneElemento, r.edificio, r.livello, r.zona, r.categoria]
         .some(f => f.toLowerCase().includes(search.toLowerCase()));
       const matchStatus = filterStatus === 'ALL' || r.status === filterStatus;
-      return matchSearch && matchStatus;
+      const matchBim = filterBim === 'ALL' || (r.bimStatus ?? 'BIM ON') === filterBim;
+      return matchSearch && matchStatus && matchBim;
     });
-  }, [results, search, filterStatus]);
+  }, [results, search, filterStatus, filterBim]);
+  const nBimOff = results.filter(r => r.bimStatus === 'BIM OFF').length;
 
   const cols = useMemo(() => activeItems(hierarchy), [hierarchy]);
   const grandTotal = filtered.reduce((s, r) => s + r.total, 0);
@@ -219,6 +222,16 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                   >{f.label}{f.id !== 'ALL' ? ` ${f.n}` : ''}</button>
                 ))}
               </div>
+              {nBimOff > 0 && (
+                <div className="flex items-center gap-0.5 pl-2 border-l border-slate-200 dark:border-white/10">
+                  {([['ALL', 'Tutti'], ['BIM ON', `BIM ON ${results.length - nBimOff}`], ['BIM OFF', `BIM OFF ${nBimOff}`]] as const).map(([id, label]) => (
+                    <button
+                      key={id} onClick={() => setFilterBim(id)}
+                      className={`px-2 py-0.5 rounded text-[12px] ${filterBim === id ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white font-semibold' : 'hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                    >{label}</button>
+                  ))}
+                </div>
+              )}
               <div className="relative">
                 <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -274,7 +287,12 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
                         {single ? (single.codicePrezzarioTarget || 'NVP') : r.status === 'NVP' ? (r.tariffaOriginal || 'NVP') : subs.length > 1 ? `${subs.length} voci` : (r.tariffaOriginal || '—')}
                       </td>
                       <td className="py-1.5 pr-3">
-                        <div className="truncate font-medium" title={r.descrizioneElemento}>{r.descrizioneElemento}</div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`shrink-0 px-1 rounded text-[9px] font-bold tracking-wide border ${r.bimStatus === 'BIM OFF' ? 'border-violet-400 text-violet-700 bg-violet-50 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/40' : 'border-slate-300 text-slate-500 dark:border-white/15 dark:text-slate-400'}`} title={r.bimStatus === 'BIM OFF' ? 'Inserito a mano, non presente nel modello Revit' : 'Estratto dal modello Revit'}>
+                            {r.bimStatus === 'BIM OFF' ? 'BIM OFF' : 'BIM ON'}
+                          </span>
+                          <span className="truncate font-medium" title={r.descrizioneElemento}>{r.descrizioneElemento}</span>
+                        </div>
                         {r.status === 'NAO_ENCONTRADO' && r.notes && <div className="truncate text-[11px] text-red-700 dark:text-red-300" title={r.notes}>{r.notes}</div>}
                       </td>
                       <td className="py-1.5 text-right font-mono tabular-nums">{r.quantitaElemento.toLocaleString('it-IT', { maximumFractionDigits: 2 })}</td>

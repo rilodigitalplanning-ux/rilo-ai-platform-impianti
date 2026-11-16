@@ -100,7 +100,10 @@ export async function parseRevitExcel(buffer: ArrayBuffer): Promise<ExcelParseRe
       const rows = sheetRows(ws);
       const cols = idx === 0 ? firstCols : detectCmeColumns(rows[0] ?? []);
       if (!cols) { warnings.push(`Foglio ${ws.name}: intestazioni non riconosciute (RDP_WBS*, CME_ELE*), ignorato.`); return; }
-      const out = parseCmeRows(rows, cols, idx === 0 ? 'BIM ON' : 'BIM OFF', makeId, ws.name);
+      // lo stato si ricava dal nome della scheda ("BIM OFF"/"BIM ON"); altrimenti dalla posizione (1ª = ON, 2ª = OFF)
+      const nm = ws.name.toUpperCase().replace(/[^A-Z]/g, '');
+      const status: 'BIM ON' | 'BIM OFF' = nm.includes('BIMOFF') ? 'BIM OFF' : nm.includes('BIMON') ? 'BIM ON' : idx === 0 ? 'BIM ON' : 'BIM OFF';
+      const out = parseCmeRows(rows, cols, status, makeId, ws.name);
       elementos.push(...out.elementos);
       warnings.push(...out.warnings);
     });

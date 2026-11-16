@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { X, Upload, FileSpreadsheet, FileText, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { parsePrezzarioUpload, ACCEPTED_PREZZARIO_FILES, type PrezzarioParseOutput } from '../services/prezzarioImport';
-import { savePrezzario } from '../services/prezzarioService';
+import { savePrezzario, summarizeVoci } from '../services/prezzarioService';
 import { getCurrentUser } from '../lib/currentUser';
 
 interface Props {
@@ -157,6 +157,20 @@ export const UploadPrezzarioModal: React.FC<Props> = ({ existingNames, onClose, 
                 {parsed.pages ? ` in ${parsed.pages} pagine` : ''}
                 {parsed.skipped > 0 && <span className="opacity-60 font-normal text-gray-500 dark:text-white/50"> · {parsed.skipped.toLocaleString('it-IT')} righe senza prezzo scartate</span>}
               </div>
+              {(() => {
+                const st = summarizeVoci(parsed.voci);
+                const pct = (n: number) => `${((n / st.total) * 100).toFixed(1).replace('.', ',')}%`;
+                const problem = (st.zeroPrice + st.noUm) / st.total > 0.01; // poche voci a zero sono normali (es. "Avvertenze")
+                return (
+                  <div className={`flex gap-2 p-3 rounded-xl border text-[11px] ${problem ? 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300'}`}>
+                    {problem ? <AlertTriangle size={14} className="shrink-0 mt-0.5" /> : <CheckCircle2 size={14} className="shrink-0 mt-0.5" />}
+                    <span>
+                      Controllo: {st.zeroPrice.toLocaleString('it-IT')} voci con prezzo 0 ({pct(st.zeroPrice)}) · {st.noUm.toLocaleString('it-IT')} senza unità di misura ({pct(st.noUm)}) · {st.withCategoria.toLocaleString('it-IT')} con categoria.
+                      {st.zeroPrice / st.total > 0.05 && ' Troppe voci a prezzo 0: il file potrebbe avere un formato diverso dal previsto, controlla l\'anteprima prima di salvare.'}
+                    </span>
+                  </div>
+                );
+              })()}
               {parsed.source === 'pdf' && (
                 <div className="flex gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300">
                   <AlertTriangle size={14} className="shrink-0 mt-0.5" />

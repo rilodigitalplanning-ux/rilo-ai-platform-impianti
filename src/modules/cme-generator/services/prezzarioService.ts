@@ -49,6 +49,108 @@ function findCodiceCol(headers: string[]): string | undefined {
   return findCol(headers, TARIFFA_ALIASES) ?? findCol(headers, CODICE_ALIASES);
 }
 
+// ── Lettura delle righe di un foglio ──────────────────────────────────────────
+// Due formati:
+//  1) una riga per voce: tariffa, descrizione, UM e prezzo sulla stessa riga;
+//  2) due righe per voce (esportazione di PriMus): la riga della tariffa ha la descrizione e prezzo/UM vuoti,
+//     la riga successiva (senza tariffa) ha "euro (importo in lettere)", l'UM e il prezzo.
+// Nel secondo formato le righe di titolo con rientro (senza tariffa né prezzo) danno la categoria della voce.
+const isEmpty = (v: unknown) => v === '' || v == null || (typeof v === 'string' && v.trim() === '');
+const isEuroLine = (v: unknown) => /^euro\s*\(/i.test(String(v ?? '').trim());
+
+function findHeaderRow(rows: any[][]): number {
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const headers = (rows[i] ?? []).map(h => String(h ?? ''));
+    if (findCodiceCol(headers) && findCol(headers, DESC_ALIASES) && findCol(headers, VALORE_ALIASES)) return i;
+  }
+  return 0;
+}
+
+export function parseSheetRows(rows: any[][]): PrezzarioVoce[] {
+  if (rows.length < 2) throw new Error('Il file non contiene dati sufficienti.');
+
+  const h = findHeaderRow(rows);
+  const headers = (rows[h] as any[]).map(x => String(x ?? ''));
+
+  // TARIFFA is the primary codice — stored as `codice` in our DB for uniform lookup
+  const colCodice    = findCodiceCol(headers);
+  const colDesc      = findCol(headers, DESC_ALIASES);
+  const colValore    = findCol(headers, VALORE_ALIASES);
+  const colUm        = findCol(headers, UM_ALIASES);
+  const colCategoria = findCol(headers, CATEGORIA_ALIASES);
+
+  if (!colCodice || !colDesc || !colValore) {
+    const found = headers.filter(Boolean).join(', ');
+    throw new Error(
+      `Il file deve contenere le colonne: TARIFFA, DESCRIZIONE, PREZZO e UM.\nColonne trovate: ${found}`
+    );
+  }
+
+  const iCod = headers.indexOf(colCodice), iDesc = headers.indexOf(colDesc), iVal = headers.indexOf(colValore);
+  const iUm = colUm ? headers.indexOf(colUm) : -1, iCat = colCategoria ? headers.indexOf(colCategoria) : -1;
+
+  const voci: PrezzarioVoce[] = [];
+  const paths: string[] = [];          // categoria ricavata dai titoli, per voce
+  let twoLine = 0;
+  const stack: string[] = [];          // titoli correnti per livello di rientro
+
+  for (let r = h + 1; r < rows.length; r++) {
+    const row = rows[r] as any[];
+    if (!row || row.every(isEmpty)) continue;
+
+    const codice = String(row[iCod] ?? '').trim();
+    if (!codice) {
+      // riga di titolo: descrizione con rientro, senza prezzo e senza "euro (…)"
+      const raw = String(row[iDesc] ?? '');
+      if (raw.trim() && isEmpty(row[iVal]) && !isEuroLine(raw)) {
+        const level = Math.round((raw.length - raw.trimStart().length) / 4);
+        stack.length = Math.min(stack.length, level);
+        stack[level] = raw.trim();
+      }
+      continue;
+    }
+
+    let valoreRaw = row[iVal];
+    let um = iUm >= 0 ? String(row[iUm] ?? '').trim() : 'cad';
+    if (isEmpty(valoreRaw)) {
+      // formato a due righe: prezzo e UM stanno nella riga successiva, che non ha tariffa
+      const next = rows[r + 1] as any[] | undefined;
+      if (next && isEmpty(next[iCod]) && !isEmpty(next[iVal])) {
+        valoreRaw = next[iVal];
+        if (iUm >= 0 && !um) um = String(next[iUm] ?? '').trim();
+        twoLine++;
+      }
+    }
+
+    voci.push({
+      prezzarioId: 0,
+      codice,
+      descrizione: String(row[iDesc] ?? '').trim(),
+      valore: parseItNumber(valoreRaw, true),
+      um,
+      categoria: iCat >= 0 ? String(row[iCat] ?? '').trim() : '',
+    });
+    paths.push(stack.filter((t, i) => i > 0 && t && !/^<.*>$/.test(t)).filter((t, i, arr) => arr.findIndex(x => x.toLowerCase() === t.toLowerCase()) === i).join(' › '));
+  }
+
+  // Categoria dai titoli: solo nel formato a due righe e se il file non ha una colonna categoria
+  if (iCat < 0 && voci.length > 0 && twoLine / voci.length > 0.5) {
+    voci.forEach((v, i) => { v.categoria = paths[i]; });
+  }
+  return voci;
+}
+
+/** Riepilogo di controllo di un prezzario letto: voci, prezzi a zero, UM e categorie mancanti */
+export interface VociStats { total: number; zeroPrice: number; noUm: number; withCategoria: number }
+export function summarizeVoci(voci: PrezzarioVoce[]): VociStats {
+  return {
+    total: voci.length,
+    zeroPrice: voci.filter(v => !(v.valore > 0)).length,
+    noUm: voci.filter(v => !v.um).length,
+    withCategoria: voci.filter(v => !!v.categoria).length,
+  };
+}
+
 // ── Parse an uploaded Excel (.xlsx/.xls) or CSV file into PrezzarioVoce[] ────
 // Uses SheetJS (xlsx) — 100% browser-native, no Node.js stream dependencies.
 export async function parsePrezzarioFile(file: File): Promise<PrezzarioVoce[]> {
@@ -68,45 +170,7 @@ export async function parsePrezzarioFile(file: File): Promise<PrezzarioVoce[]> {
 
   // Convert sheet to array of arrays (raw values)
   const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-  if (rows.length < 2) throw new Error('Il file non contiene dati sufficienti.');
-
-  const headers = (rows[0] as any[]).map(h => String(h ?? ''));
-
-  // TARIFFA is the primary codice — stored as `codice` in our DB for uniform lookup
-  const colCodice    = findCodiceCol(headers);
-  const colDesc      = findCol(headers, DESC_ALIASES);
-  const colValore    = findCol(headers, VALORE_ALIASES);
-  const colUm        = findCol(headers, UM_ALIASES);
-  const colCategoria = findCol(headers, CATEGORIA_ALIASES);
-
-  if (!colCodice || !colDesc || !colValore) {
-    const found = headers.filter(Boolean).join(', ');
-    throw new Error(
-      `Il file deve contenere le colonne: TARIFFA, DESCRIZIONE, PREZZO e UM.\nColonne trovate: ${found}`
-    );
-  }
-
-  const idxOf = (name: string) => headers.indexOf(name);
-  const voci: PrezzarioVoce[] = [];
-
-  for (let rowIdx = 1; rowIdx < rows.length; rowIdx++) {
-    const row = rows[rowIdx] as any[];
-    if (!row || row.every(c => c === '' || c == null)) continue;
-
-    const codice = String(row[idxOf(colCodice)] ?? '').trim();
-    if (!codice) continue;
-
-    voci.push({
-      prezzarioId: 0,
-      codice,
-      descrizione: String(row[idxOf(colDesc)] ?? '').trim(),
-      valore: parseItNumber(row[idxOf(colValore)], true),
-      um:       colUm        ? String(row[idxOf(colUm)]        ?? 'cad').trim() : 'cad',
-      categoria: colCategoria ? String(row[idxOf(colCategoria)] ?? '').trim()  : '',
-    });
-  }
-
-  return voci;
+  return parseSheetRows(rows);
 }
 
 function parseCsvText(text: string): PrezzarioVoce[] {
