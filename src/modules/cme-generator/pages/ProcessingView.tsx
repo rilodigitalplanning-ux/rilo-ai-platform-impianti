@@ -10,8 +10,8 @@ import { buildResultFromComponenti, collectNvpCodes, nvpCodeKey, voceKey, type N
 import type { Elemento, PrezzarioVoce, ResultadoItem } from '../types';
 
 interface ProcessingViewProps {
-  targetPrezzarioId: number;
-  targetPrezzarioName: string;
+  prezzarioId: number;
+  prezzarioName: string;
   onDone: () => void;
 }
 
@@ -21,8 +21,8 @@ interface NvpModalState {
 }
 
 export function ProcessingView({
-  targetPrezzarioId,
-  targetPrezzarioName,
+  prezzarioId,
+  prezzarioName,
   onDone,
 }: ProcessingViewProps) {
   const { state, dispatch } = useCme();
@@ -47,7 +47,7 @@ export function ProcessingView({
       addLog('Caricamento del prezzario da Supabase...', 'info');
 
       // Load target prezzario voci
-      const targetVoci: PrezzarioVoce[] = await loadVoci(targetPrezzarioId);
+      const targetVoci: PrezzarioVoce[] = await loadVoci(prezzarioId);
       addLog(`✓ ${targetVoci.length} voci caricate nel prezzario di destinazione`, 'ok');
 
       if (targetVoci.length === 0) {
@@ -79,7 +79,7 @@ export function ProcessingView({
         for (let i = 0; i < state.elementos.length; i++) {
           const el = state.elementos[i];
           dispatch({ type: 'SET_PROGRESS', payload: { current: i + 1, total: state.elementos.length, message: `${el.descricao.slice(0, 40)}...` } });
-          const result = buildResultFromComponenti(el, voci, nvps, targetPrezzarioName);
+          const result = buildResultFromComponenti(el, voci, nvps, prezzarioName);
           dispatch({ type: 'ADD_RESULTADO', payload: result });
           if (result.status === 'NAO_ENCONTRADO') addLog(`✗ ${el.descricao.slice(0, 35)} — ${result.notes}`, 'err');
         }
@@ -164,7 +164,7 @@ export function ProcessingView({
               unidade:             el.unidade || '', // Revit unit
               valoreUnitario:      compositeValoreUnitario, // PU considering composition
               total,
-              originePrezzo:       targetPrezzarioName,
+              originePrezzo:       prezzarioName,
               status:              'OK',
               subItems: [
                 {
@@ -237,7 +237,7 @@ export function ProcessingView({
               unidade:             el.unidade || '', // Revit unit exclusively
               valoreUnitario:      singleValoreUnitario, // PU considering factor
               total,
-              originePrezzo:       targetPrezzarioName,
+              originePrezzo:       prezzarioName,
               status:              'OK',
               subItems: [{
                 codiceDeiOriginal:          el.tariffa,

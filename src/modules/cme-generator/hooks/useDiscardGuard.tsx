@@ -66,5 +66,26 @@ export function useDiscardGuard() {
     </div>
   ) : null;
 
-  return { guard, dialog };
+  return { guard, dialog, unsaved };
+}
+
+// Il tasto "indietro" del mouse/browser uscirebbe dal modulo e azzererebbe il computo senza avviso.
+// Finché c'è un computo aperto si tiene una voce "sentinella" nella cronologia: "indietro" la consuma,
+// la si ripristina e si chiede conferma; solo se l'utente conferma si esce davvero.
+export function useBackGuard(guard: (action: () => void) => void, active: boolean) {
+  const guardRef = useRef(guard);
+  guardRef.current = guard;
+
+  useEffect(() => {
+    if (!active) return;
+    if (!window.history.state?.cmeGuard) window.history.pushState({ ...window.history.state, cmeGuard: true }, '');
+    let leaving = false;
+    const onPop = () => {
+      if (leaving) return;
+      window.history.pushState({ ...window.history.state, cmeGuard: true }, '');
+      guardRef.current(() => { leaving = true; window.history.go(-2); });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [active]);
 }

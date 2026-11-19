@@ -29,20 +29,33 @@ export function ComputoMetricoView() {
 
   // Prezzari (caricati da Supabase, condivisi tra tutti gli utenti)
   const [prezzarios, setPrezzarios] = useState<PrezzarioRecord[]>([]);
-  const [refPrezzarioId, setRefPrezzarioId] = useState<number | null>(null);
-  const [targetPrezzarioId, setTargetPrezzarioId] = useState<number | null>(null);
+  const [prezzarioId, setPrezzarioId] = useState<number | null>(null);
 
   useEffect(() => {
     listPrezzarios()
       .then(list => {
         setPrezzarios(list);
-        if (list.length > 0 && !refPrezzarioId) setRefPrezzarioId(list[0].id!);
-        if (list.length > 0 && !targetPrezzarioId) setTargetPrezzarioId(list[list.length > 1 ? 1 : 0].id!);
+        // se il prezzario scelto non esiste più (eliminato) si ripiega sul primo
+        setPrezzarioId(cur => (cur !== null && list.some(p => p.id === cur) ? cur : (list[0]?.id ?? null)));
       })
       .catch(() => {});
   }, [prezzariVersion]);
 
-  const targetName = prezzarios.find(p => p.id === targetPrezzarioId)?.nome ?? 'Target';
+  const prezzarioName = prezzarios.find(p => p.id === prezzarioId)?.nome ?? 'Prezzario';
+
+  // Impostazioni: si ricorda la sezione di provenienza per poter tornare indietro
+  const viewBeforeSettings = useRef<typeof view>('setup');
+  const openSettings = () => { if (view !== 'settings') viewBeforeSettings.current = view; setView('settings'); };
+  const closeSettings = () => {
+    const back = viewBeforeSettings.current;
+    setView(back === 'settings' || back === 'processing' ? (state.resultados.size > 0 ? 'results' : 'setup') : back);
+  };
+  useEffect(() => {
+    if (view !== 'settings') return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSettings(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   function handleElementSelect(id: string) {
     setSelectedElementId(id);
@@ -94,9 +107,9 @@ export function ComputoMetricoView() {
 
           {user.role === 'admin' && (
             <button
-              onClick={() => setView('settings')}
+              onClick={() => (view === 'settings' ? closeSettings() : openSettings())}
               className={`p-1.5 rounded transition-colors ${view === 'settings' ? 'bg-slate-200 dark:bg-white/15 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
-              title="Impostazioni"
+              title={view === 'settings' ? 'Chiudi le impostazioni e torna al computo' : 'Impostazioni'}
             >
               <Settings size={16} />
             </button>
@@ -117,19 +130,17 @@ export function ComputoMetricoView() {
             <SetupView
               user={user}
               prezzarios={prezzarios}
-              refPrezzarioId={refPrezzarioId}
-              setRefPrezzarioId={setRefPrezzarioId}
-              targetPrezzarioId={targetPrezzarioId}
-              setTargetPrezzarioId={setTargetPrezzarioId}
+              prezzarioId={prezzarioId}
+              setPrezzarioId={setPrezzarioId}
               onStartProcessing={() => setView('processing')}
-              onGoToSettings={() => setView('settings')}
+              onGoToSettings={openSettings}
             />
           )}
 
           {view === 'processing' && (
             <ProcessingView
-              targetPrezzarioId={targetPrezzarioId!}
-              targetPrezzarioName={targetName}
+              prezzarioId={prezzarioId!}
+              prezzarioName={prezzarioName}
               onDone={() => {
                 // la revisione serve solo se ci sono voci da verificare (ALERT o NON TROVATO)
                 const needsReview = [...stateRef.current.resultados.values()].some(r => r.status === 'ALERT' || r.status === 'NAO_ENCONTRADO');
@@ -151,7 +162,7 @@ export function ComputoMetricoView() {
           )}
 
           {view === 'settings' && (
-            <CmeSettingsPage user={user} prezzarios={prezzarios} setPrezzarios={setPrezzarios} />
+            <CmeSettingsPage user={user} prezzarios={prezzarios} setPrezzarios={setPrezzarios} onBack={closeSettings} />
           )}
         </motion.div>
       </div>

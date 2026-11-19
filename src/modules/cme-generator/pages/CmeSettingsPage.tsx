@@ -4,7 +4,7 @@
 // Regular users cannot see this page (Settings button is hidden for non-admins).
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle, BarChart2, Plus, Database, Lock } from 'lucide-react';
+import { Upload, Trash2, FileSpreadsheet, AlertCircle, CheckCircle, BarChart2, Plus, Database, Lock, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadTemplate, getTemplateMeta, deleteTemplate, type TemplateMetadata } from '../services/templateService';
 import {
@@ -17,9 +17,10 @@ interface Props {
   user: UserProfile;
   prezzarios: PrezzarioRecord[];
   setPrezzarios: (p: PrezzarioRecord[]) => void;
+  onBack: () => void;
 }
 
-export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
+export function CmeSettingsPage({ user, prezzarios, setPrezzarios, onBack }: Props) {
   const isAdmin = user.role === 'admin';
 
   // ── Template state ──────────────────────────────────────────────────────────
@@ -129,6 +130,9 @@ export function CmeSettingsPage({ user, prezzarios, setPrezzarios }: Props) {
       <div className="max-w-5xl mx-auto space-y-8">
 
         <div>
+          <button onClick={onBack} className="mb-3 flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 dark:border-white/15 text-[12px] font-semibold hover:bg-slate-100 dark:hover:bg-white/10">
+            <ArrowLeft size={14} /> Torna al computo
+          </button>
           <h1 className="text-2xl font-bold">Impostazioni del CME</h1>
           <p className="text-gray-500 dark:text-white/40 text-sm mt-1">
             Gestione del modello di esportazione e dei prezzari di sistema. Accesso riservato all'amministratore.

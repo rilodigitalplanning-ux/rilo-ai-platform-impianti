@@ -46,6 +46,9 @@ export function ResultsView({ onSelectElement }: ResultsViewProps) {
   const [replaceTarget, setReplaceTarget] = useState<{ row: VoceRow; scopeId: string } | null>(null);
   const [editingQty, setEditingQty] = useState<{ id: string; draft: string } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // elementi con le voci di prezzario nascoste (di default sono tutte visibili sotto l'elemento)
+  const [hiddenVoci, setHiddenVoci] = useState<Set<string>>(new Set());
+  const toggleVoci = (id: string) => setHiddenVoci(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [editingNvpId, setEditingNvpId] = useState<string | null>(null);
 
   // Modifiche dirette al computo: ognuna è annullabile con Ctrl+Z
@@ -265,6 +268,9 @@ Puoi annullare con Ctrl+Z.`)) return;
             <div className="flex items-center gap-1">
               <button onClick={() => setCollapsed(new Set(allGroupKeys(filtered, cols)))} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10">Comprimi</button>
               <button onClick={() => setCollapsed(new Set())} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10">Espandi</button>
+              <span className="mx-1 text-slate-300 dark:text-white/20">|</span>
+              <button onClick={() => setHiddenVoci(new Set(filtered.map(r => r.idElemento)))} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10" title="Nascondi le voci di prezzario sotto ogni elemento">Nascondi voci</button>
+              <button onClick={() => setHiddenVoci(new Set())} className="px-2 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-white/10" title="Mostra le voci di prezzario sotto ogni elemento">Mostra voci</button>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-0.5">
@@ -336,8 +342,18 @@ Puoi annullare con Ctrl+Z.`)) return;
                   const pad = 16 + row.depth * 18;
                   const out = [(
                     <tr key={`i-${r.idElemento}`} onClick={() => onSelectElement(r.idElemento)} onContextMenu={e => openItemMenu(e, r)} className={`cursor-pointer border-t border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 ${rowTone}`}>
-                      <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate" style={{ paddingLeft: pad }} title={single?.descrizionePrezzarioTarget}>
-                        {single ? (single.codicePrezzarioTarget || 'NVP') : r.status === 'NVP' ? (r.tariffaOriginal || 'NVP') : subs.length > 1 ? `${subs.length} voci` : (r.tariffaOriginal || '—')}
+                      <td className="py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate" style={{ paddingLeft: pad - 4 }}>
+                        {subs.length > 0 ? (
+                          <button
+                            onClick={e => { e.stopPropagation(); toggleVoci(r.idElemento); }}
+                            className="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white" title={hiddenVoci.has(r.idElemento) ? 'Mostra le voci di prezzario' : 'Nascondi le voci di prezzario'}
+                          >
+                            <span className="inline-block w-3 text-slate-400">{hiddenVoci.has(r.idElemento) ? '▸' : '▾'}</span>
+                            {hiddenVoci.has(r.idElemento) && single ? (single.codicePrezzarioTarget || 'NVP') : `${subs.length} voc${subs.length === 1 ? 'e' : 'i'}`}
+                          </button>
+                        ) : (
+                          <span className="pl-4">{r.status === 'NVP' ? (r.tariffaOriginal || 'NVP') : (r.tariffaOriginal || '—')}</span>
+                        )}
                       </td>
                       <td className="py-1.5 pr-3">
                         <div className="flex items-center gap-1.5 min-w-0">
@@ -382,7 +398,7 @@ Puoi annullare con Ctrl+Z.`)) return;
                       </td>
                     </tr>
                   )];
-                  if (subs.length > 1) {
+                  if (subs.length > 0 && !hiddenVoci.has(r.idElemento)) {
                     subs.forEach((sub, i) => {
                       const q = r.quantitaElemento * (sub.quantitaComposizione || 1);
                       out.push(

@@ -9,7 +9,7 @@ import { BYPASS_USER } from '../../lib/currentUser';
 import { useCme } from '../../context/CmeContext';
 import { AgentPanel } from '../AgentPanel';
 import { HierarchyDialog } from '../HierarchyDialog';
-import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useDiscardGuard, useBackGuard } from '../../hooks/useDiscardGuard';
 import { useSaveProject } from '../../hooks/useSaveProject';
 import { eur } from '../../lib/format';
 import { Toast } from '../../../cme-editor/components/Toast';
@@ -34,7 +34,8 @@ export const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }
   const user = BYPASS_USER;
   const { state, totalAmount } = useCme();
   const { save, isSaving } = useSaveProject();
-  const { guard, dialog } = useDiscardGuard();
+  const { guard, dialog, unsaved: computoOpen } = useDiscardGuard();
+  useBackGuard(guard, computoOpen);
   const [agentOpen, setAgentOpen] = useState(false);
   const goModules = () => guard(() => navigate('/'));
   const hasProject = state.resultados.size > 0;

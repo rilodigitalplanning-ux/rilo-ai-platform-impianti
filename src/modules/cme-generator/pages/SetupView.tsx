@@ -16,10 +16,8 @@ import type { UserProfile } from '../lib/currentUser';
 interface SetupViewProps {
   user: UserProfile;
   prezzarios: PrezzarioRecord[];
-  refPrezzarioId: number | null;
-  setRefPrezzarioId: (id: number) => void;
-  targetPrezzarioId: number | null;
-  setTargetPrezzarioId: (id: number) => void;
+  prezzarioId: number | null;
+  setPrezzarioId: (id: number) => void;
   onStartProcessing: () => void;
   onGoToSettings: () => void;
 }
@@ -27,10 +25,8 @@ interface SetupViewProps {
 export function SetupView({
   user,
   prezzarios,
-  refPrezzarioId,
-  setRefPrezzarioId,
-  targetPrezzarioId,
-  setTargetPrezzarioId,
+  prezzarioId,
+  setPrezzarioId,
   onStartProcessing,
   onGoToSettings,
 }: SetupViewProps) {
@@ -40,7 +36,7 @@ export function SetupView({
   const csvRef = useRef<HTMLInputElement>(null);
 
   const canProcess = state.elementos.length > 0 && prezzarios.length > 0 &&
-    refPrezzarioId !== null && targetPrezzarioId !== null;
+    prezzarioId !== null;
 
   // ── CSV da Revit ────────────────────────────────────────────────────────────
 
@@ -154,7 +150,7 @@ export function SetupView({
       {/* ── Step 2: Seleziona Prezzari ────────────────────────────────────── */}
       <section>
         <h2 className="text-sm font-bold tracking-widest text-gray-500 dark:text-white/40 uppercase mb-4">
-          2 — Seleziona Prezzari
+          2 — Seleziona il prezzario
         </h2>
 
         {prezzarios.length === 0 ? (
@@ -181,43 +177,22 @@ export function SetupView({
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-5">
-            {[
-              {
-                label: 'Prezzario di Riferimento',
-                sublabel: 'DEI — fonte dei prezzi base',
-                value: refPrezzarioId,
-                set: setRefPrezzarioId,
-                color: '#0F3460',
-              },
-              {
-                label: 'Prezzario Target',
-                sublabel: 'Prezzario da confrontare / applicare',
-                value: targetPrezzarioId,
-                set: setTargetPrezzarioId,
-                color: '#E94560',
-              },
-            ].map(({ label, sublabel, value, set, color }) => (
-              <div key={label} className="bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5 space-y-3">
-                <div>
-                  <label className="block text-xs font-bold tracking-widest uppercase text-gray-500 dark:text-white/50 mb-0.5">
-                    {label}
-                  </label>
-                  <p className="text-gray-400 dark:text-white/25 text-[11px]">{sublabel}</p>
-                </div>
-                <select
-                  value={value ?? ''}
-                  onChange={e => set(Number(e.target.value))}
-                  className="w-full bg-white dark:bg-[#0a0f1a] border border-gray-300 dark:border-white/10 focus:border-gray-400 dark:focus:border-white/30 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-sm outline-none transition-colors"
-                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
-                >
-                  <option value="">— seleziona —</option>
-                  {prezzarios.map(p => (
-                    <option key={p.id} value={p.id}>{p.nome}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+          <div className="max-w-xl bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-2xl p-5 space-y-3">
+            <div>
+              <label className="block text-xs font-bold tracking-widest uppercase text-gray-500 dark:text-white/50 mb-0.5">Prezzario</label>
+              <p className="text-gray-400 dark:text-white/25 text-[11px]">Le voci della scheda CME vengono confrontate con questo prezzario e ne prendono i prezzi</p>
+            </div>
+            <select
+              value={prezzarioId ?? ''}
+              onChange={e => setPrezzarioId(Number(e.target.value))}
+              className="w-full bg-white dark:bg-[#0a0f1a] border border-gray-300 dark:border-white/10 focus:border-gray-400 dark:focus:border-white/30 rounded-xl px-4 py-3 text-gray-900 dark:text-white text-sm outline-none transition-colors"
+              style={{ borderLeftColor: '#E94560', borderLeftWidth: 3 }}
+            >
+              <option value="">— seleziona —</option>
+              {prezzarios.map(p => (
+                <option key={p.id} value={p.id}>{p.nome}</option>
+              ))}
+            </select>
           </div>
         )}
       </section>
